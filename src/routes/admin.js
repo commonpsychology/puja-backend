@@ -5,7 +5,7 @@ const {
   getDashboard,
   getUsers, toggleUserActive, setUserStatus, setUserRole,
   getAllAppointments, setAppointmentStatus,
-  getAllOrders, setOrderStatus,
+  getAllOrders, setOrderStatus,sendNotificationToClient,
   getAllPayments,
   createProduct, updateProduct, deleteProduct,
 } = require('./controllers/adminController')
@@ -23,6 +23,9 @@ router.get('/users',                    getUsers)
 router.patch('/users/:id/toggle-active', toggleUserActive)
 router.patch('/users/:id/status',        setUserStatus)
 router.patch('/users/:id/role',          setUserRole)
+
+//notifications
+router.post('/notifications', sendNotificationToClient)
 
 // Appointments
 router.get('/appointments',              getAllAppointments)

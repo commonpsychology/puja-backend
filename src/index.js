@@ -5,24 +5,23 @@ const helmet       = require('helmet')
 const cors         = require('cors')
 const cookieParser = require('cookie-parser')
 const rateLimit    = require('express-rate-limit')
+
+const errorHandler    = require('./middleware/errorHandler')
 const therapistRoutes = require('./routes/therapistRoutes')
-
-
-const errorHandler = require('./middleware/errorHandler')
 
 const app  = express()
 const PORT = process.env.PORT || 5000
 
-// ── Security ─────────────────────────────────────────────────
+// ── Security ──────────────────────────────────────────────────
 app.use(helmet())
-app.set('trust proxy', 1) // needed for req.ip behind proxies
+app.set('trust proxy', 1)
 
-// ── CORS ─────────────────────────────────────────────────────
+// ── CORS ──────────────────────────────────────────────────────
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
 // ── Parsers ───────────────────────────────────────────────────
@@ -37,26 +36,27 @@ app.use(rateLimit({
   message: { success: false, message: 'Too many requests. Slow down.' },
 }))
 
-// ── Health check ─────────────────────────────────────────────
+// ── Health check ──────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({
   status: 'ok', service: 'Puja Samargi API',
   version: '2.0.0', timestamp: new Date().toISOString(),
 }))
 
-// ── Routes ───────────────────────────────────────────────────
-app.use('/api/auth',          require('./routes/auth'))
-app.use('/api/profile',       require('./routes/profile'))
-app.use('/api/therapists',    require('./routes/therapists'))
-app.use('/api/therapist-portal', therapistRoutes)
-app.use('/api/appointments',  require('./routes/appointments'))
-app.use('/api',               require('./routes/store'))        // /api/products, /api/cart, /api/orders
-app.use('/api/payments',      require('./routes/payments'))
-app.use('/api',               require('./routes/wellness'))     // /api/assessments, /api/mood, /api/journal
-app.use('/api/notifications', require('./routes/notifications'))
-app.use('/api/admin',         require('./routes/admin'))
-app.use('/api/contact',       require('./routes/contact'))
-app.use('/api/polls',         require('./routes/polls'))
-app.use('/api/reviews',       require('./routes/reviews'))
+// ── Routes ────────────────────────────────────────────────────
+app.use('/api/auth',              require('./routes/auth'))
+app.use('/api/profile',           require('./routes/profile'))
+app.use('/api/therapists',        require('./routes/therapists'))
+app.use('/api/therapist-portal',  therapistRoutes)          // ← therapist dashboard
+app.use('/api/appointments',      require('./routes/appointments'))
+app.use('/api',                   require('./routes/store'))       // /api/products, /api/cart, /api/orders
+app.use('/api/payments',          require('./routes/payments'))
+app.use('/api',                   require('./routes/wellness'))    // /api/assessments, /api/mood, /api/journal
+app.use('/api/notifications',     require('./routes/notifications'))
+app.use('/api/admin',             require('./routes/admin'))
+app.use('/api/contact',           require('./routes/contact'))
+app.use('/api/polls',             require('./routes/polls'))
+app.use('/api/reviews',           require('./routes/reviews'))
+
 // ── 404 ───────────────────────────────────────────────────────
 app.use((req, res) =>
   res.status(404).json({ success: false, message: `${req.method} ${req.path} not found.` })

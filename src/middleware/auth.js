@@ -8,11 +8,15 @@ const authenticate = (req, res, next) => {
 
   const token = authHeader.split(' ')[1]
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    console.log('✅ Token decoded:', decoded)  // ← ADD THIS
+    req.user = decoded
     next()
-  } catch {
+  } catch (err) {
+    console.log('❌ Token error:', err.message)  // ← ADD THIS
     return res.status(401).json({ success: false, message: 'Invalid or expired token.' })
   }
 }
+
 
 module.exports = { authenticate }

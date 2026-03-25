@@ -56,7 +56,7 @@ app.use('/api/admin',             require('./routes/admin'))
 app.use('/api/contact',           require('./routes/contact'))
 app.use('/api/polls',             require('./routes/polls'))
 app.use('/api/reviews',           require('./routes/reviews'))
-
+app.use('/api/community', require('./routes/communityRoute'))
 // ── 404 ───────────────────────────────────────────────────────
 app.use((req, res) =>
   res.status(404).json({ success: false, message: `${req.method} ${req.path} not found.` })

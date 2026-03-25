@@ -1,4 +1,5 @@
 /* eslint-disable no-undef */
+const bcrypt = require('bcryptjs')
 const supabase = require('../../db/supabase')
 
 // ── GET /api/admin/dashboard ──────────────────────────────────
@@ -29,6 +30,102 @@ async function getDashboard(req, res, next) {
     })
   } catch (err) { next(err) }
 }
+
+//registerstaff
+async function registerStaff(req, res, next) {
+  try {
+    const { full_name, email, phone, password, specialization, department, notes } = req.body
+ 
+    // Validate required fields
+    if (!full_name?.trim())
+      return res.status(400).json({ success: false, message: 'Full name is required.' })
+    if (!email?.trim())
+      return res.status(400).json({ success: false, message: 'Email is required.' })
+    if (!password)
+      return res.status(400).json({ success: false, message: 'Password is required.' })
+    if (password.length < 8)
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' })
+    if (!/[A-Z]/.test(password))
+      return res.status(400).json({ success: false, message: 'Password needs at least one uppercase letter.' })
+    if (!/[0-9]/.test(password))
+      return res.status(400).json({ success: false, message: 'Password needs at least one number.' })
+ 
+    const normalizedEmail = email.trim().toLowerCase()
+ 
+    // Check for duplicate email
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+ 
+    if (existing)
+      return res.status(409).json({ success: false, message: 'A user with this email already exists.' })
+ 
+    // Hash password
+    const password_hash = await bcrypt.hash(password, 12)
+ 
+    // 1. Insert into profiles — role is ALWAYS 'therapist', never admin/staff
+    const { data: newUser, error: insertError } = await supabase
+      .from('profiles')
+      .insert({
+        full_name:      full_name.trim(),
+        email:          normalizedEmail,
+        phone:          phone?.trim() || null,
+        password_hash,
+        role:           'therapist',           // ← hardcoded, never changes
+        department:     department?.trim() || null,
+        notes:          notes?.trim() || null,
+        is_active:      true,
+        email_verified: true,
+        created_by:     req.user?.id || null,
+      })
+      .select('id, full_name, email, role, created_at')
+      .single()
+ 
+    if (insertError) {
+      console.error('[registerStaff] Insert error:', insertError)
+      if (insertError.code === '23505')
+        return res.status(409).json({ success: false, message: 'A user with this email already exists.' })
+      return res.status(500).json({ success: false, message: 'Database error. Please try again.' })
+    }
+ 
+    // 2. Create therapist record so they appear in the therapists table
+    //    and get access to the therapist portal (/api/therapist-portal/*)
+    const { error: therapistError } = await supabase
+      .from('therapists')
+      .insert({
+        user_id:        newUser.id,
+        specialization: specialization?.trim() || null,
+        is_active:      true,
+        is_verified:    true,
+      })
+ 
+    if (therapistError) {
+      console.warn('[registerStaff] Therapist record creation failed:', therapistError.message)
+      // Non-fatal — profile was created, therapist record can be added manually
+    }
+ 
+    // 3. Audit log (non-blocking)
+    supabase.from('audit_logs').insert({
+      actor_id:  req.user?.id,
+      action:    'register_therapist',
+      target_id: newUser.id,
+      details:   { role: 'therapist', specialization: specialization?.trim() || null },
+    }).then(({ error }) => {
+      if (error) console.warn('[registerStaff] Audit log failed:', error.message)
+    })
+ 
+    return res.status(201).json({
+      success: true,
+      message: 'Therapist registered successfully.',
+      user: newUser,
+    })
+ 
+  } catch (err) { next(err) }
+}
+ 
+ 
 
 // ── GET /api/admin/users ──────────────────────────────────────
 async function getUsers(req, res, next) {
@@ -321,7 +418,7 @@ module.exports = {
   getUsers, toggleUserActive, setUserStatus, setUserRole,
   getAllAppointments, setAppointmentStatus,
   getAllOrders, setOrderStatus,sendNotificationToClient,
-  getAllPayments,
+  getAllPayments, registerStaff,
   createProduct, updateProduct, deleteProduct,
   getMyTherapistAppointments,
 }

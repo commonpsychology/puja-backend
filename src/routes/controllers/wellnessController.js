@@ -150,7 +150,7 @@ const getJournalEntries = async (req, res) => {
 
   const { data, error, count } = await supabase
     .from('journal_entries')
-    .select('id, title, mood_score, tags, is_private, created_at', { count: 'exact' })
+.select('id, title, content, mood_score, tags, is_private, created_at', { count: 'exact' })
     .eq('user_id', req.user.sub)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)

@@ -1,0 +1,187 @@
+// src/routes/admin.js
+const express          = require('express')
+const { authenticate, requireRole } = require('../middleware/auth')
+
+const {
+  getDashboard,
+  registerStaff,
+
+  getUsers, toggleUserActive, setUserStatus, setUserRole,
+
+  getAllAppointments, setAppointmentStatus,
+
+  getAllOrders, setOrderStatus,
+
+  getPayments, updatePaymentStatus,
+
+  sendNotificationToClient,
+
+  getProducts,  createProduct,  updateProduct,  deleteProduct,
+  getPosts,     createPost,     updatePost,     deletePost,
+  getNews,      createNews,     updateNews,     deleteNews,
+  getResources, createResource, updateResource, deleteResource,
+  getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
+  getResearch,  createResearch, updateResearch, deleteResearch,
+
+  getPsychVideos,   createPsychVideo,   updatePsychVideo,   deletePsychVideo,
+  getPsychAnalyses, createPsychAnalysis,updatePsychAnalysis,deletePsychAnalysis,
+
+  getCourses,     createCourse,     updateCourse,     deleteCourse,
+  getAssessments, createAssessment, updateAssessment, deleteAssessment,
+
+  getCommunityGroups, createCommunityGroup, updateCommunityGroup, deleteCommunityGroup,
+
+  getFaqs,    createFaq,    updateFaq,    deleteFaq,
+  getCoupons, createCoupon, updateCoupon, deleteCoupon,
+
+  getContacts,   updateContact,      deleteContact,
+  getSubscriptions, updateSubscription,
+  getSettings,   updateSetting,
+} = require('../controllers/adminController')
+
+const {
+  adminListGroups, adminCreateGroup, adminToggleGroup,
+  adminListSessions, adminCreateSession,
+  adminListPosts, adminModeratePost, adminDeletePost,
+  adminListReservations,
+} = require('../controllers/communityController')
+
+const router = express.Router()
+
+// Every admin route requires valid JWT + admin or staff role
+const guard = [authenticate, requireRole(['admin', 'staff'])]
+
+// ─── Dashboard ───────────────────────────────────────────────
+router.get('/dashboard', guard, getDashboard)
+
+// ─── Staff registration ──────────────────────────────────────
+router.post('/register-staff', guard, registerStaff)
+
+// ─── Users ───────────────────────────────────────────────────
+router.get   ('/users',                   guard, getUsers)
+router.patch ('/users/:id/toggle-active', guard, toggleUserActive)
+router.patch ('/users/:id/status',        guard, setUserStatus)
+router.patch ('/users/:id/role',          guard, setUserRole)
+
+// ─── Appointments ────────────────────────────────────────────
+router.get   ('/appointments',            guard, getAllAppointments)
+router.patch ('/appointments/:id/status', guard, setAppointmentStatus)
+router.put   ('/appointments/:id',        guard, setAppointmentStatus)
+
+// ─── Orders ──────────────────────────────────────────────────
+router.get   ('/orders',            guard, getAllOrders)
+router.patch ('/orders/:id/status', guard, setOrderStatus)
+router.put   ('/orders/:id',        guard, setOrderStatus)
+
+// ─── Payments ────────────────────────────────────────────────
+router.get   ('/payments',      guard, getPayments)
+router.put   ('/payments/:id',  guard, updatePaymentStatus)
+router.patch ('/payments/:id',  guard, updatePaymentStatus)
+
+// ─── Notifications ───────────────────────────────────────────
+router.post('/notifications', guard, sendNotificationToClient)
+
+// ─── Products ────────────────────────────────────────────────
+router.get   ('/products',     guard, getProducts)
+router.post  ('/products',     guard, createProduct)
+router.put   ('/products/:id', guard, updateProduct)
+router.patch ('/products/:id', guard, updateProduct)
+router.delete('/products/:id', guard, deleteProduct)
+
+// ─── Blog Posts ──────────────────────────────────────────────
+router.get   ('/posts',     guard, getPosts)
+router.post  ('/posts',     guard, createPost)
+router.put   ('/posts/:id', guard, updatePost)
+router.delete('/posts/:id', guard, deletePost)
+
+// ─── News Articles ───────────────────────────────────────────
+router.get   ('/news',     guard, getNews)
+router.post  ('/news',     guard, createNews)
+router.put   ('/news/:id', guard, updateNews)
+router.delete('/news/:id', guard, deleteNews)
+
+// ─── Resources ───────────────────────────────────────────────
+router.get   ('/resources',     guard, getResources)
+router.post  ('/resources',     guard, createResource)
+router.put   ('/resources/:id', guard, updateResource)
+router.delete('/resources/:id', guard, deleteResource)
+
+// ─── Gallery ─────────────────────────────────────────────────
+router.get   ('/gallery',     guard, getGallery)
+router.post  ('/gallery',     guard, createGalleryItem)
+router.put   ('/gallery/:id', guard, updateGalleryItem)
+router.delete('/gallery/:id', guard, deleteGalleryItem)
+
+// ─── Research Papers ─────────────────────────────────────────
+router.get   ('/research',     guard, getResearch)
+router.post  ('/research',     guard, createResearch)
+router.put   ('/research/:id', guard, updateResearch)
+router.delete('/research/:id', guard, deleteResearch)
+
+// ─── Psych Videos ────────────────────────────────────────────
+router.get   ('/psych-videos',     guard, getPsychVideos)
+router.post  ('/psych-videos',     guard, createPsychVideo)
+router.put   ('/psych-videos/:id', guard, updatePsychVideo)
+router.delete('/psych-videos/:id', guard, deletePsychVideo)
+
+// ─── Psych Analyses ──────────────────────────────────────────
+router.get   ('/psych-analyses',     guard, getPsychAnalyses)
+router.post  ('/psych-analyses',     guard, createPsychAnalysis)
+router.put   ('/psych-analyses/:id', guard, updatePsychAnalysis)
+router.delete('/psych-analyses/:id', guard, deletePsychAnalysis)
+
+// ─── Courses ─────────────────────────────────────────────────
+router.get   ('/courses',     guard, getCourses)
+router.post  ('/courses',     guard, createCourse)
+router.put   ('/courses/:id', guard, updateCourse)
+router.delete('/courses/:id', guard, deleteCourse)
+
+// ─── Assessments ─────────────────────────────────────────────
+router.get   ('/assessments',     guard, getAssessments)
+router.post  ('/assessments',     guard, createAssessment)
+router.put   ('/assessments/:id', guard, updateAssessment)
+router.delete('/assessments/:id', guard, deleteAssessment)
+
+// ─── Community Groups ────────────────────────────────────────
+router.get   ('/community-groups',     guard, getCommunityGroups)
+router.post  ('/community-groups',     guard, createCommunityGroup)
+router.put   ('/community-groups/:id', guard, updateCommunityGroup)
+router.delete('/community-groups/:id', guard, deleteCommunityGroup)
+
+// ─── FAQs ────────────────────────────────────────────────────
+router.get   ('/faqs',     guard, getFaqs)
+router.post  ('/faqs',     guard, createFaq)
+router.put   ('/faqs/:id', guard, updateFaq)
+router.delete('/faqs/:id', guard, deleteFaq)
+
+// ─── Coupons ─────────────────────────────────────────────────
+router.get   ('/coupons',     guard, getCoupons)
+router.post  ('/coupons',     guard, createCoupon)
+router.put   ('/coupons/:id', guard, updateCoupon)
+router.delete('/coupons/:id', guard, deleteCoupon)
+
+// ─── Contact Messages ────────────────────────────────────────
+router.get   ('/contacts',     guard, getContacts)
+router.put   ('/contacts/:id', guard, updateContact)
+router.delete('/contacts/:id', guard, deleteContact)
+
+// ─── Subscriptions ───────────────────────────────────────────
+router.get('/subscriptions',     guard, getSubscriptions)
+router.put('/subscriptions/:id', guard, updateSubscription)
+
+// ─── Site Settings ───────────────────────────────────────────
+router.get('/settings',     guard, getSettings)
+router.put('/settings/:id', guard, updateSetting)
+
+// ─── Community (legacy sub-routes) ───────────────────────────
+router.get   ('/community/groups',               guard, adminListGroups)
+router.post  ('/community/groups',               guard, adminCreateGroup)
+router.patch ('/community/groups/:id/toggle',    guard, adminToggleGroup)
+router.get   ('/community/sessions',             guard, adminListSessions)
+router.post  ('/community/sessions',             guard, adminCreateSession)
+router.get   ('/community/posts',                guard, adminListPosts)
+router.patch ('/community/posts/:id/moderate',   guard, adminModeratePost)
+router.delete('/community/posts/:id',            guard, adminDeletePost)
+router.get   ('/community/reservations',         guard, adminListReservations)
+
+module.exports = router

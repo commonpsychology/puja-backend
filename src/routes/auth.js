@@ -11,6 +11,7 @@ const {
   verifyEmail,
   resendVerification,
   forgotPassword,
+  checkCredentials,
   resetPassword,
   getMe,
 } = require('./controllers/authController')
@@ -79,6 +80,7 @@ router.post('/register',             authLimiter,  registerRules,      register)
 router.post('/login',                authLimiter,  loginRules,         login)
 router.post('/refresh',              refresh)
 router.post('/logout',               logout)
+router.post('/check-credentials', checkCredentials)
 router.get ('/verify-email',         verifyEmail)
 router.post('/resend-verification',  emailLimiter, emailOnlyRules,     resendVerification)
 router.post('/forgot-password',      emailLimiter, emailOnlyRules,     forgotPassword)

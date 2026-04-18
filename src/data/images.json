@@ -1,0 +1,342 @@
+{
+  "therapists": {
+    "dr-anita-shrestha": {
+      "avatar": "/images/therapists/anita-shrestha.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Anita+Shrestha&background=c8e6c9&color=1b5e20&size=200&bold=true&font-size=0.4",
+      "alt": "Dr. Anita Shrestha - Clinical Psychologist"
+    },
+    "mr-roshan-karki": {
+      "avatar": "/images/therapists/roshan-karki.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Roshan+Karki&background=bbdefb&color=0d47a1&size=200&bold=true&font-size=0.4",
+      "alt": "Mr. Roshan Karki - CBT Therapist"
+    },
+    "ms-priya-tamang": {
+      "avatar": "/images/therapists/priya-tamang.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Priya+Tamang&background=fff9c4&color=e65100&size=200&bold=true&font-size=0.4",
+      "alt": "Ms. Priya Tamang - Counselor"
+    },
+    "dr-suresh-adhikari": {
+      "avatar": "/images/therapists/suresh-adhikari.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Suresh+Adhikari&background=c8e6c9&color=1b5e20&size=200&bold=true&font-size=0.4",
+      "alt": "Dr. Suresh Adhikari - Psychiatrist"
+    },
+    "ms-deepa-rai": {
+      "avatar": "/images/therapists/deepa-rai.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Deepa+Rai&background=ffe0b2&color=e65100&size=200&bold=true&font-size=0.4",
+      "alt": "Ms. Deepa Rai - Art Therapist"
+    },
+    "mr-bikash-thapa": {
+      "avatar": "/images/therapists/bikash-thapa.jpg",
+      "fallback": "https://ui-avatars.com/api/?name=Bikash+Thapa&background=b3e5fc&color=01579b&size=200&bold=true&font-size=0.4",
+      "alt": "Mr. Bikash Thapa - Addiction Counselor"
+    }
+  },
+  "gallery": {
+    "items": [
+      {
+        "id": "gallery-1",
+        "title": "Annual Mental Health Awareness Walk 2024",
+        "category": "Events",
+        "date_label": "Mar 2024",
+        "emoji": "🚶",
+        "cols": 2,
+        "rows": 2,
+        "gradient": "linear-gradient(135deg,#007BA8 0%,#00BFFF 60%,#a0e9ff 100%)",
+        "image_url": "/images/gallery/awareness-walk-2024.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80",
+        "description": "600+ participants walked 5km across Kathmandu in solidarity with mental health."
+      },
+      {
+        "id": "gallery-2",
+        "title": "Rural Outreach Camp — Sindhupalchok",
+        "category": "Community Outreach",
+        "date_label": "Jan 2024",
+        "emoji": "🏕",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#2d4a3e 0%,#3d6b5a 60%,#6a9e88 100%)",
+        "image_url": "/images/gallery/rural-outreach-sindhupalchok.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&q=80",
+        "description": "Our team conducted psychosocial first aid sessions for 80 families."
+      },
+      {
+        "id": "gallery-3",
+        "title": "Dr. Anita Shrestha at WHO Conference",
+        "category": "Award & Recognition",
+        "date_label": "Dec 2023",
+        "emoji": "🏆",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#b56a28 0%,#d4a574 60%,#f5ede0 100%)",
+        "image_url": "/images/gallery/who-conference-2023.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=600&q=80",
+        "description": "Our Director presented research on teletherapy efficacy at the WHO Forum."
+      },
+      {
+        "id": "gallery-4",
+        "title": "Calm Room — Our Therapy Lounge",
+        "category": "Therapy Spaces",
+        "date_label": "Nov 2023",
+        "emoji": "🛋",
+        "cols": 1,
+        "rows": 2,
+        "gradient": "linear-gradient(135deg,#0f4c6b 0%,#009FD4 60%,#22d3ee 100%)",
+        "image_url": "/images/gallery/calm-room-baneshwor.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1585421514284-efb74c2b69ba?w=600&q=80",
+        "description": "The new sensory calm room at our Baneshwor center."
+      },
+      {
+        "id": "gallery-5",
+        "title": "Mindfulness Workshop — Corporate Group",
+        "category": "Workshops",
+        "date_label": "Oct 2023",
+        "emoji": "🧘",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#1a3a4a 0%,#2e6080 60%,#5b9ab5 100%)",
+        "image_url": "/images/gallery/mindfulness-workshop-corporate.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=600&q=80",
+        "description": "35 employees from a leading Kathmandu bank completed a full-day mindfulness workshop."
+      },
+      {
+        "id": "gallery-6",
+        "title": "Team Building Retreat — Nagarkot",
+        "category": "Team",
+        "date_label": "Sep 2023",
+        "emoji": "🌄",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#006b8f 0%,#00BFFF 60%,#a0e9ff 100%)",
+        "image_url": "/images/gallery/team-retreat-nagarkot.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=600&q=80",
+        "description": "Our clinical team spent a weekend in Nagarkot for reflective practice."
+      },
+      {
+        "id": "gallery-7",
+        "title": "School Mental Health Day — Lalitpur",
+        "category": "Community Outreach",
+        "date_label": "Aug 2023",
+        "emoji": "🏫",
+        "cols": 2,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#0369a1 0%,#0ea5e9 60%,#7dd3fc 100%)",
+        "image_url": "/images/gallery/school-mental-health-lalitpur.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1497486751825-1233686d5d80?w=800&q=80",
+        "description": "Interactive sessions with 300 students at 4 schools in Lalitpur."
+      },
+      {
+        "id": "gallery-8",
+        "title": "Art Therapy Group Session",
+        "category": "Therapy Spaces",
+        "date_label": "Jul 2023",
+        "emoji": "🎨",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#c45b2a 0%,#e8834d 60%,#f5c5a3 100%)",
+        "image_url": "/images/gallery/art-therapy-session.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=600&q=80",
+        "description": "Participants in our trauma recovery group creating expressive art pieces."
+      },
+      {
+        "id": "gallery-9",
+        "title": "Women's Resilience Circle — Bhaktapur",
+        "category": "Community Outreach",
+        "date_label": "Jun 2023",
+        "emoji": "💜",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#5b2d8e 0%,#9b59b6 60%,#d7bde2 100%)",
+        "image_url": "/images/gallery/womens-resilience-circle.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80",
+        "description": "Monthly safe circle for women survivors facilitated by our trained social workers."
+      },
+      {
+        "id": "gallery-10",
+        "title": "New Center Opening — Baneshwor",
+        "category": "Events",
+        "date_label": "May 2023",
+        "emoji": "🎉",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#007BA8 0%,#22d3ee 60%,#e0f7ff 100%)",
+        "image_url": "/images/gallery/center-opening-baneshwor.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=600&q=80",
+        "description": "Ribbon-cutting ceremony for our expanded Baneshwor facility."
+      },
+      {
+        "id": "gallery-11",
+        "title": "Trainee Cohort — Class of 2023",
+        "category": "Team",
+        "date_label": "Apr 2023",
+        "emoji": "👩‍🎓",
+        "cols": 1,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#2d4a3e 0%,#6a9e88 60%,#b8d5c8 100%)",
+        "image_url": "/images/gallery/trainee-cohort-2023.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=600&q=80",
+        "description": "Our 2023 trainee psychologists completing their supervised clinical placements."
+      },
+      {
+        "id": "gallery-12",
+        "title": "Couples Workshop — Gottman Method",
+        "category": "Workshops",
+        "date_label": "Mar 2023",
+        "emoji": "💑",
+        "cols": 2,
+        "rows": 1,
+        "gradient": "linear-gradient(135deg,#0f2c3f 0%,#009FD4 60%,#22d3ee 100%)",
+        "image_url": "/images/gallery/couples-workshop-gottman.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=800&q=80",
+        "description": "4 couples completed our intensive Gottman Method workshop."
+      }
+    ],
+    "categories": ["All", "Events", "Community Outreach", "Therapy Spaces", "Workshops", "Team", "Award & Recognition"]
+  },
+  "blog": {
+    "posts": [
+      {
+        "id": "blog-1",
+        "slug": "understanding-anxiety-nepal",
+        "image_url": "/images/blog/anxiety-nepal.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1474631245212-32dc3c8310c6?w=600&q=80",
+        "alt": "Person looking out window thoughtfully"
+      },
+      {
+        "id": "blog-2",
+        "slug": "cbt-techniques-beginners",
+        "image_url": "/images/blog/cbt-techniques.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=80",
+        "alt": "Notebook with CBT exercises"
+      },
+      {
+        "id": "blog-3",
+        "slug": "depression-more-than-sadness",
+        "image_url": "/images/blog/depression-awareness.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1541199249251-f713e6145474?w=600&q=80",
+        "alt": "Silhouette of person in thought"
+      },
+      {
+        "id": "blog-4",
+        "slug": "mindfulness-for-busy-people",
+        "image_url": "/images/blog/mindfulness-busy.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=600&q=80",
+        "alt": "Person meditating in nature"
+      },
+      {
+        "id": "blog-5",
+        "slug": "relationship-communication",
+        "image_url": "/images/blog/relationship-communication.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=600&q=80",
+        "alt": "Two people in conversation"
+      },
+      {
+        "id": "blog-6",
+        "slug": "childhood-trauma-adults",
+        "image_url": "/images/blog/childhood-trauma.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=600&q=80",
+        "alt": "Child looking at sky"
+      },
+      {
+        "id": "blog-7",
+        "slug": "parenting-anxious-child",
+        "image_url": "/images/blog/parenting-anxious.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1536640712-4d4c36ff0e4e?w=600&q=80",
+        "alt": "Parent and child walking together"
+      },
+      {
+        "id": "blog-8",
+        "slug": "sleep-mental-health",
+        "image_url": "/images/blog/sleep-mental-health.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=600&q=80",
+        "alt": "Person sleeping peacefully"
+      }
+    ],
+    "categories": ["All", "Anxiety", "Self-Care", "Depression", "Mindfulness", "Relationships", "Trauma", "Parenting"]
+  },
+  "social_work": {
+    "programs": [
+      {
+        "id": 1,
+        "image_url": "/images/social-work/rural-outreach.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=600&q=80",
+        "alt": "Rural mental health outreach camp"
+      },
+      {
+        "id": 2,
+        "image_url": "/images/social-work/school-programme.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1497486751825-1233686d5d80?w=600&q=80",
+        "alt": "School mental health programme"
+      },
+      {
+        "id": 3,
+        "image_url": "/images/social-work/women-resilience.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=600&q=80",
+        "alt": "Women resilience project"
+      },
+      {
+        "id": 4,
+        "image_url": "/images/social-work/migrant-support.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=600&q=80",
+        "alt": "Migrant worker support"
+      },
+      {
+        "id": 5,
+        "image_url": "/images/social-work/elderly-care.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1516307365426-bea591f05011?w=600&q=80",
+        "alt": "Elderly mental health initiative"
+      },
+      {
+        "id": 6,
+        "image_url": "/images/social-work/crisis-hotline.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1423592707957-3b212afa6733?w=600&q=80",
+        "alt": "Crisis hotline and first responder training"
+      }
+    ]
+  },
+  "courses": {
+    "thumbnails": [
+      {
+        "index": 0,
+        "title": "Mindfulness-Based Stress Reduction",
+        "image_url": "/images/courses/mindfulness-mbsr.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&q=80",
+        "alt": "Mindfulness meditation course"
+      },
+      {
+        "index": 1,
+        "title": "Overcoming Anxiety: A CBT Approach",
+        "image_url": "/images/courses/cbt-anxiety.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1474631245212-32dc3c8310c6?w=400&q=80",
+        "alt": "CBT anxiety course"
+      },
+      {
+        "index": 2,
+        "title": "Building Emotional Resilience",
+        "image_url": "/images/courses/resilience.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1544027993-37dbfe43562a?w=400&q=80",
+        "alt": "Emotional resilience course"
+      },
+      {
+        "index": 3,
+        "title": "Sleep Better: CBT for Insomnia",
+        "image_url": "/images/courses/sleep-cbt.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=400&q=80",
+        "alt": "Sleep improvement course"
+      },
+      {
+        "index": 4,
+        "title": "Workplace Mental Health",
+        "image_url": "/images/courses/workplace-mh.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?w=400&q=80",
+        "alt": "Workplace mental health course"
+      },
+      {
+        "index": 5,
+        "title": "Healthy Relationships Workshop",
+        "image_url": "/images/courses/relationships.jpg",
+        "unsplash": "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&q=80",
+        "alt": "Healthy relationships workshop"
+      }
+    ]
+  }
+}

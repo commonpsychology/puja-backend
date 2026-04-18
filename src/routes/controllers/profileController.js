@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
-const bcrypt = require('bcryptjs')
-const { validationResult } = require('express-validator')
+const bcrypt  = require('bcryptjs')
+const multer  = require('multer')
 const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
@@ -50,9 +50,15 @@ const updateProfile = async (req, res) => {
     'gender','address','city','country','language','bio','emergency_contact',
   ]
 
+ const NULL_IF_EMPTY = ['date_of_birth', 'gender']
+
   const updates = {}
   allowed.forEach((field) => {
-    if (req.body[field] !== undefined) updates[field] = req.body[field]
+    if (req.body[field] !== undefined) {
+      updates[field] = NULL_IF_EMPTY.includes(field) && req.body[field] === ''
+        ? null
+        : req.body[field]
+    }
   })
 
   if (Object.keys(updates).length === 0) {
@@ -67,6 +73,7 @@ const updateProfile = async (req, res) => {
     .single()
 
   if (error) {
+    console.error('Profile update Supabase error:', error)
     return res.status(500).json({ success: false, message: 'Could not update profile.' })
   }
 
@@ -101,35 +108,58 @@ const changePassword = async (req, res) => {
   }
 
   const password_hash = await bcrypt.hash(newPassword, 12)
-
   await supabase.from('profiles').update({ password_hash }).eq('id', req.user.sub)
-
-  // Revoke all refresh tokens so other devices are logged out
   await supabase.from('refresh_tokens').delete().eq('user_id', req.user.sub)
 
   return res.status(200).json({ success: true, message: 'Password changed successfully. Please log in again.' })
 }
 
 // POST /api/profile/avatar
-const uploadAvatar = async (req, res) => {
-  const { avatarUrl } = req.body
+const _upload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Only JPG, PNG or WEBP allowed.'))
+  },
+}).single('avatar')
 
-  if (!avatarUrl) {
-    return res.status(400).json({ success: false, message: 'avatarUrl is required.' })
-  }
+const uploadAvatar = (req, res) => {
+  _upload(req, res, async (multerErr) => {
+    if (multerErr) return res.status(400).json({ message: multerErr.message })
+    if (!req.file)  return res.status(400).json({ message: 'No file uploaded.' })
 
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .update({ avatar_url: avatarUrl })
-    .eq('id', req.user.sub)
-    .select()
-    .single()
+    try {
+      // NOTE: your auth middleware uses req.user.sub (not req.user.id)
+      const userId   = req.user.sub
+      const ext      = req.file.mimetype.split('/')[1].replace('jpeg', 'jpg')
+      const filePath = `${userId}/avatar.${ext}`
 
-  if (error) {
-    return res.status(500).json({ success: false, message: 'Could not update avatar.' })
-  }
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, req.file.buffer, { upsert: true, contentType: req.file.mimetype })
 
-  return res.status(200).json({ success: true, message: 'Avatar updated.', avatarUrl: profile.avatar_url })
+      if (uploadError) throw new Error(uploadError.message)
+
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      const avatarUrl = urlData.publicUrl
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+
+      if (dbError) throw new Error(dbError.message)
+
+      res.json({ avatar_url: avatarUrl, message: 'Avatar updated.' })
+    } catch (err) {
+      console.error('uploadAvatar error:', err)
+      res.status(500).json({ message: err.message || 'Could not update avatar.' })
+    }
+  })
 }
 
 // DELETE /api/profile

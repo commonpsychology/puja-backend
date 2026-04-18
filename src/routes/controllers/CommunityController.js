@@ -1,4 +1,11 @@
-// src/controllers/communityController.js
+// src/routes/controllers/communityController.js — COMPLETE FIXED VERSION
+// Changes from previous version:
+//   1. Added adminListMemberships  — queries joined_at (NOT created_at, which doesn't exist)
+//   2. Added adminUpdateMembership — handles PUT /admin/group-memberships/:id
+//   3. Added adminDeleteMembership — handles DELETE /admin/group-memberships/:id
+//   4. adminGetSessions now returns { items, pagination } so frontend .items works
+//   5. Updated module.exports to export all three new functions
+
 const supabase = require('../../db/supabase')
 
 // ── helpers ───────────────────────────────────────────────────
@@ -12,13 +19,13 @@ function pg(req) {
 // GROUPS
 // ═══════════════════════════════════════════════════════════════
 
-// GET /api/community/groups
 async function listGroups(req, res, next) {
   try {
     const { data, error } = await supabase
       .from('community_groups')
       .select(`
         id, name, description, emoji, tags, color, created_at,
+        membership_fee, membership_period, next_session_at,
         group_memberships ( count )
       `)
       .eq('is_active', true)
@@ -26,7 +33,6 @@ async function listGroups(req, res, next) {
 
     if (error) throw error
 
-    // Flatten member count
     const groups = (data || []).map(g => ({
       ...g,
       member_count: g.group_memberships?.[0]?.count ?? 0,
@@ -37,13 +43,13 @@ async function listGroups(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// GET /api/community/groups/:id
 async function getGroup(req, res, next) {
   try {
     const { data, error } = await supabase
       .from('community_groups')
       .select(`
         id, name, description, emoji, tags, color, created_at,
+        membership_fee, membership_period, next_session_at,
         group_memberships ( count )
       `)
       .eq('id', req.params.id)
@@ -55,21 +61,28 @@ async function getGroup(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/community/groups/:id/join
 async function joinGroup(req, res, next) {
   try {
-    const { display_name, is_anonymous, email } = req.body
+    const {
+      display_name, is_anonymous, email,
+      payment_status, payment_method, payment_reference, payment_amount, payment_id,
+    } = req.body
     const groupId = req.params.id
     const userId  = req.user?.sub || null
 
     const { data, error } = await supabase
       .from('group_memberships')
       .upsert({
-        group_id:     groupId,
-        user_id:      userId,
-        display_name: is_anonymous ? 'Anonymous' : (display_name || 'Member'),
-        is_anonymous: !!is_anonymous,
-        email:        is_anonymous ? null : (email || null),
+        group_id:          groupId,
+        user_id:           userId,
+        display_name:      is_anonymous ? 'Anonymous' : (display_name || 'Member'),
+        is_anonymous:      !!is_anonymous,
+        email:             is_anonymous ? null : (email || null),
+        payment_status:    payment_status    || 'pending',
+        payment_method:    payment_method    || null,
+        payment_reference: payment_reference || null,
+        payment_amount:    payment_amount    || null,
+        payment_id:        payment_id        || null,
       }, { onConflict: 'group_id,user_id', ignoreDuplicates: false })
       .select()
       .single()
@@ -79,7 +92,6 @@ async function joinGroup(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// DELETE /api/community/groups/:id/leave
 async function leaveGroup(req, res, next) {
   try {
     const userId = req.user?.sub
@@ -96,7 +108,6 @@ async function leaveGroup(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// GET /api/community/groups/:id/membership  — check if current user is member
 async function checkMembership(req, res, next) {
   try {
     const userId = req.user?.sub
@@ -113,19 +124,27 @@ async function checkMembership(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// GET /api/community/my-groups  — all groups joined by current user
 async function myGroups(req, res, next) {
   try {
     const userId = req.user?.sub
-    if (!userId) return res.json({ success: true, groupIds: [] })
+    if (!userId) return res.json({ success: true, groupIds: [], memberships: [] })
 
     const { data, error } = await supabase
       .from('group_memberships')
-      .select('group_id')
+      .select(`
+        id, group_id, payment_status, payment_method, payment_reference, payment_amount,
+        community_groups ( id, name, emoji, membership_fee, membership_period )
+      `)
       .eq('user_id', userId)
 
     if (error) throw error
-    return res.json({ success: true, groupIds: (data || []).map(m => m.group_id) })
+
+    const memberships = data || []
+    return res.json({
+      success: true,
+      groupIds: memberships.map(m => m.group_id),
+      memberships,
+    })
   } catch (err) { next(err) }
 }
 
@@ -133,63 +152,54 @@ async function myGroups(req, res, next) {
 // SESSIONS
 // ═══════════════════════════════════════════════════════════════
 
-// GET /api/community/sessions
 async function listSessions(req, res, next) {
   try {
     const { data, error } = await supabase
-      .from('group_sessions')
-      .select(`
-        id, title, facilitator, mode, scheduled_at, max_spots, notes,
-        group_id,
-        community_groups ( name, emoji ),
-        session_reservations ( count )
-      `)
-      .eq('is_active', true)
-      .gte('scheduled_at', new Date().toISOString())
+      .from('v_group_sessions')
+      .select('*')
       .order('scheduled_at', { ascending: true })
 
     if (error) throw error
-
-    const sessions = (data || []).map(s => ({
-      ...s,
-      reserved_count: s.session_reservations?.[0]?.count ?? 0,
-      spots_left: s.max_spots - (s.session_reservations?.[0]?.count ?? 0),
-      session_reservations: undefined,
-    }))
-
-    return res.json({ success: true, sessions })
+    return res.json({ success: true, sessions: data || [] })
   } catch (err) { next(err) }
 }
 
-// POST /api/community/sessions/:id/reserve
 async function reserveSession(req, res, next) {
   try {
-    const { display_name, email, is_anonymous } = req.body
+    const {
+      display_name, is_anonymous, payment_method, payment_reference,
+      payment_status: clientStatus, payment_amount: clientAmount, payment_id,
+    } = req.body
     const sessionId = req.params.id
     const userId    = req.user?.sub || null
 
-    // Check spots
     const { data: sess, error: sErr } = await supabase
       .from('group_sessions')
-      .select('max_spots, session_reservations(count)')
+      .select('max_spots, reserved_count, price')
       .eq('id', sessionId)
       .single()
 
     if (sErr) throw sErr
-    const taken = sess.session_reservations?.[0]?.count ?? 0
-    if (taken >= sess.max_spots)
+    if ((sess.reserved_count ?? 0) >= sess.max_spots)
       return res.status(409).json({ success: false, message: 'No spots remaining for this session.' })
 
+    const isFree         = !sess.price || Number(sess.price) === 0
+    const payment_status = clientStatus || (isFree ? 'free' : (payment_method ? 'pending' : 'unpaid'))
+    const payment_amount = clientAmount || (isFree ? null : (sess.price || null))
+
     const { data, error } = await supabase
-      .from('session_reservations')
-      .upsert({
-        session_id:   sessionId,
-        user_id:      userId,
-        display_name: is_anonymous ? 'Anonymous' : (display_name || 'Guest'),
-        email:        is_anonymous ? null : (email || null),
-        is_anonymous: !!is_anonymous,
-        status:       'confirmed',
-      }, { onConflict: 'session_id,user_id', ignoreDuplicates: false })
+      .from('group_session_reservations')
+      .insert({
+        session_id:        sessionId,
+        user_id:           userId,
+        display_name:      is_anonymous ? 'Anonymous' : (display_name || 'Guest'),
+        is_anonymous:      !!is_anonymous,
+        payment_method:    payment_method    || null,
+        payment_reference: payment_reference || null,
+        payment_status,
+        payment_amount,
+        payment_id:        payment_id        || null,
+      })
       .select()
       .single()
 
@@ -198,38 +208,14 @@ async function reserveSession(req, res, next) {
   } catch (err) { next(err) }
 }
 
-
-exports.upsertAppointmentNote = async (req, res) => {
-  try {
-    const { id } = req.params
-    const { note, private_note } = req.body
-
-    const { data, error } = await supabase
-      .from('appointment_notes')
-      .upsert(
-        { appointment_id: id, note, private_note, updated_at: new Date().toISOString() },
-        { onConflict: 'appointment_id' }
-      )
-      .select()
-      .single()
-
-    if (error) throw error
-
-    res.json({ success: true, data })
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message })
-  }
-}
-
-// DELETE /api/community/sessions/:id/cancel-reservation
 async function cancelReservation(req, res, next) {
   try {
     const userId = req.user?.sub
     if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
     const { error } = await supabase
-      .from('session_reservations')
-      .update({ status: 'cancelled' })
+      .from('group_session_reservations')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
       .eq('session_id', req.params.id)
       .eq('user_id', userId)
 
@@ -238,20 +224,30 @@ async function cancelReservation(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// GET /api/community/my-reservations
 async function myReservations(req, res, next) {
   try {
     const userId = req.user?.sub
-    if (!userId) return res.json({ success: true, sessionIds: [] })
+    if (!userId) return res.json({ success: true, reservations: [] })
 
     const { data, error } = await supabase
-      .from('session_reservations')
-      .select('session_id')
+      .from('group_session_reservations')
+      .select(`
+        id, session_id, payment_status, payment_method,
+        payment_reference, payment_amount, payment_id,
+        confirmed_at, status, created_at,
+        group_sessions ( id, title, scheduled_at, mode, facilitator, price,
+          community_groups ( name, emoji, membership_fee ) )
+      `)
       .eq('user_id', userId)
-      .eq('status', 'confirmed')
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
 
     if (error) throw error
-    return res.json({ success: true, sessionIds: (data || []).map(r => r.session_id) })
+    return res.json({
+      success: true,
+      reservations: data || [],
+      sessionIds: (data || []).map(r => r.session_id),
+    })
   } catch (err) { next(err) }
 }
 
@@ -259,7 +255,6 @@ async function myReservations(req, res, next) {
 // POSTS
 // ═══════════════════════════════════════════════════════════════
 
-// GET /api/community/posts
 async function listPosts(req, res, next) {
   try {
     const { group_id } = req.query
@@ -292,7 +287,6 @@ async function listPosts(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/community/posts
 async function createPost(req, res, next) {
   try {
     const { group_id, content, display_name, is_anonymous } = req.body
@@ -303,7 +297,6 @@ async function createPost(req, res, next) {
     if (!group_id)
       return res.status(400).json({ success: false, message: 'group_id is required.' })
 
-    // Verify group exists
     const { data: group, error: gErr } = await supabase
       .from('community_groups')
       .select('id')
@@ -335,39 +328,36 @@ async function createPost(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// POST /api/community/posts/:id/like
 async function likePost(req, res, next) {
   try {
-    const postId    = req.params.id
-    const userId    = req.user?.sub || null
+    const postId     = req.params.id
+    const userId     = req.user?.sub || null
     const sessionKey = req.body.session_key || null
 
-    // Check if already liked
     let existing
     if (userId) {
-      const { data } = await supabase.from('post_likes').select('id').eq('post_id', postId).eq('user_id', userId).maybeSingle()
+      const { data } = await supabase
+        .from('post_likes').select('id').eq('post_id', postId).eq('user_id', userId).maybeSingle()
       existing = data
     }
 
     if (existing) {
-      // Unlike
       await supabase.from('post_likes').delete().eq('id', existing.id)
       return res.json({ success: true, liked: false })
     }
 
-    // Like
     await supabase.from('post_likes').insert({ post_id: postId, user_id: userId, session_key: sessionKey })
     return res.json({ success: true, liked: true })
   } catch (err) { next(err) }
 }
 
-// DELETE /api/community/posts/:id  (own post or admin)
 async function deletePost(req, res, next) {
   try {
     const userId = req.user?.sub
     const role   = req.user?.role
 
-    const { data: post } = await supabase.from('community_posts').select('user_id').eq('id', req.params.id).single()
+    const { data: post } = await supabase
+      .from('community_posts').select('user_id').eq('id', req.params.id).single()
     if (!post) return res.status(404).json({ success: false, message: 'Post not found.' })
 
     if (post.user_id !== userId && !['admin', 'staff'].includes(role))
@@ -379,10 +369,9 @@ async function deletePost(req, res, next) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// APPOINTMENT NOTES (Therapist)
+// APPOINTMENT NOTES
 // ═══════════════════════════════════════════════════════════════
 
-// GET /api/therapist-portal/appointments/:id/notes
 async function getAppointmentNote(req, res, next) {
   try {
     const therapistUserId = req.user?.sub
@@ -404,7 +393,6 @@ async function getAppointmentNote(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// PUT /api/therapist-portal/appointments/:id/notes
 async function upsertAppointmentNote(req, res, next) {
   try {
     const { content } = req.body
@@ -439,6 +427,7 @@ async function adminListGroups(req, res, next) {
       .from('community_groups')
       .select(`
         id, name, description, emoji, tags, is_active, created_at,
+        membership_fee, membership_period,
         group_memberships ( count )
       `)
       .order('created_at', { ascending: true })
@@ -449,18 +438,26 @@ async function adminListGroups(req, res, next) {
       member_count: g.group_memberships?.[0]?.count ?? 0,
       group_memberships: undefined,
     }))
-    return res.json({ success: true, groups })
+    return res.json({ success: true, groups, items: groups })
   } catch (err) { next(err) }
 }
 
 async function adminCreateGroup(req, res, next) {
   try {
-    const { name, description, emoji, tags } = req.body
+    const { name, description, emoji, tags, membership_fee, membership_period } = req.body
     if (!name?.trim()) return res.status(400).json({ success: false, message: 'Name is required.' })
 
     const { data, error } = await supabase
       .from('community_groups')
-      .insert({ name: name.trim(), description: description?.trim(), emoji: emoji || '💙', tags: tags || [], created_by: req.user?.sub })
+      .insert({
+        name:              name.trim(),
+        description:       description?.trim(),
+        emoji:             emoji || '💙',
+        tags:              tags || [],
+        membership_fee:    membership_fee    ?? 0,
+        membership_period: membership_period || 'one_time',
+        created_by:        req.user?.sub,
+      })
       .select()
       .single()
 
@@ -471,44 +468,57 @@ async function adminCreateGroup(req, res, next) {
 
 async function adminToggleGroup(req, res, next) {
   try {
-    const { data: current } = await supabase.from('community_groups').select('is_active').eq('id', req.params.id).single()
-    const { data, error } = await supabase.from('community_groups').update({ is_active: !current.is_active }).eq('id', req.params.id).select().single()
+    const { data: current } = await supabase
+      .from('community_groups').select('is_active').eq('id', req.params.id).single()
+    const { data, error } = await supabase
+      .from('community_groups').update({ is_active: !current.is_active })
+      .eq('id', req.params.id).select().single()
     if (error) throw error
     return res.json({ success: true, group: data })
   } catch (err) { next(err) }
 }
 
+// ✅ FIXED: returns { items, pagination } so AdminDashboardPage.jsx
+//    (which reads d.items) gets the data correctly.
+//    Previously returned { sessions } which the frontend never read.
 async function adminListSessions(req, res, next) {
   try {
-    const { data, error } = await supabase
-      .from('group_sessions')
-      .select(`
-        id, title, facilitator, mode, scheduled_at, max_spots, is_active, created_at,
-        community_groups ( name ),
-        session_reservations ( count )
-      `)
+    const { page, limit, offset } = pg(req)
+
+    const { data, count, error } = await supabase
+      .from('v_group_sessions')
+      .select('*', { count: 'exact' })
       .order('scheduled_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) throw error
-    const sessions = (data || []).map(s => ({
-      ...s,
-      reserved_count: s.session_reservations?.[0]?.count ?? 0,
-      spots_left: s.max_spots - (s.session_reservations?.[0]?.count ?? 0),
-      session_reservations: undefined,
-    }))
-    return res.json({ success: true, sessions })
+    return res.json({
+      success: true,
+      items: data || [],
+      sessions: data || [],           // keep for backward compat
+      pagination: { page, limit, total: count ?? (data || []).length },
+    })
   } catch (err) { next(err) }
 }
 
 async function adminCreateSession(req, res, next) {
   try {
-    const { title, facilitator, mode, scheduled_at, max_spots, group_id, notes } = req.body
+    const { title, facilitator, mode, scheduled_at, max_spots, group_id, notes, price } = req.body
     if (!title || !facilitator || !scheduled_at)
       return res.status(400).json({ success: false, message: 'title, facilitator and scheduled_at are required.' })
 
     const { data, error } = await supabase
       .from('group_sessions')
-      .insert({ title, facilitator, mode: mode || 'Online (Zoom)', scheduled_at, max_spots: max_spots || 20, group_id: group_id || null, notes: notes || null, created_by: req.user?.sub })
+      .insert({
+        title, facilitator,
+        mode:       mode       || 'Online (Zoom)',
+        scheduled_at,
+        max_spots:  max_spots  || 20,
+        group_id:   group_id   || null,
+        notes:      notes      || null,
+        price:      price      || 0,
+        created_by: req.user?.sub,
+      })
       .select()
       .single()
 
@@ -539,7 +549,8 @@ async function adminListPosts(req, res, next) {
 async function adminModeratePost(req, res, next) {
   try {
     const { is_approved } = req.body
-    const { data, error } = await supabase.from('community_posts').update({ is_approved }).eq('id', req.params.id).select().single()
+    const { data, error } = await supabase
+      .from('community_posts').update({ is_approved }).eq('id', req.params.id).select().single()
     if (error) throw error
     return res.json({ success: true, post: data })
   } catch (err) { next(err) }
@@ -556,28 +567,118 @@ async function adminListReservations(req, res, next) {
   try {
     const { session_id } = req.query
     let query = supabase
-      .from('session_reservations')
-      .select(`
-        id, display_name, email, is_anonymous, status, reserved_at,
-        group_sessions ( title, scheduled_at ),
-        profiles!session_reservations_user_id_fkey ( full_name, email )
-      `)
-      .order('reserved_at', { ascending: false })
+      .from('v_community_reservations')
+      .select('*')
+      .order('created_at', { ascending: false })
 
     if (session_id) query = query.eq('session_id', session_id)
     const { data, error } = await query
     if (error) throw error
-    return res.json({ success: true, reservations: data })
+    return res.json({ success: true, reservations: data || [], items: data || [] })
   } catch (err) { next(err) }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ADMIN — MEMBERSHIPS  ✅ ALL NEW
+// ═══════════════════════════════════════════════════════════════
+
+// GET /api/admin/group-memberships?limit=100&group_id=<uuid>
+// ⚠️  The group_memberships table has NO created_at column.
+//     The correct timestamp column is joined_at.
+async function adminListMemberships(req, res, next) {
+  try {
+    const limit   = Math.min(200, Number(req.query.limit) || 100)
+    const groupId = req.query.group_id || null
+
+    let query = supabase
+      .from('group_memberships')
+      .select(`
+        id,
+        group_id,
+        user_id,
+        display_name,
+        is_anonymous,
+        email,
+        joined_at,
+        payment_status,
+        payment_method,
+        payment_reference,
+        payment_amount,
+        payment_id,
+        confirmed_at,
+        expires_at,
+        status,
+        community_groups ( id, name, emoji )
+      `)
+      .order('joined_at', { ascending: false })   // ✅ joined_at — NOT created_at
+      .limit(limit)
+
+    if (groupId) query = query.eq('group_id', groupId)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    return res.json({ success: true, items: data || [] })
+  } catch (err) { next(err) }
+}
+
+// PUT /api/admin/group-memberships/:id
+async function adminUpdateMembership(req, res, next) {
+  try {
+    const allowed = [
+      'payment_status',
+      'confirmed_at',
+      'status',
+      'expires_at',
+      'payment_reference',
+      'payment_method',
+    ]
+    const updates = {}
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key]
+    }
+
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ success: false, message: 'No valid fields to update.' })
+
+    const { data, error } = await supabase
+      .from('group_memberships')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return res.json({ success: true, membership: data })
+  } catch (err) { next(err) }
+}
+
+// DELETE /api/admin/group-memberships/:id
+async function adminDeleteMembership(req, res, next) {
+  try {
+    const { error } = await supabase
+      .from('group_memberships')
+      .delete()
+      .eq('id', req.params.id)
+
+    if (error) throw error
+    return res.json({ success: true })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────
 module.exports = {
+  // public
   listGroups, getGroup, joinGroup, leaveGroup, checkMembership, myGroups,
   listSessions, reserveSession, cancelReservation, myReservations,
   listPosts, createPost, likePost, deletePost,
   getAppointmentNote, upsertAppointmentNote,
+  // admin
   adminListGroups, adminCreateGroup, adminToggleGroup,
   adminListSessions, adminCreateSession,
   adminListPosts, adminModeratePost, adminDeletePost,
   adminListReservations,
+  adminListMemberships,   // ✅ NEW
+  adminUpdateMembership,  // ✅ NEW
+  adminDeleteMembership,  // ✅ NEW
 }

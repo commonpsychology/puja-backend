@@ -2,10 +2,10 @@
   "name": "puja-samargi-backend",
   "version": "1.0.0",
   "description": "Backend API for Puja Samargi Mental Wellness Center",
-  "main": "src/index.js",
+  "main": "src/index.mjs",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node src/index.mjs",
+    "dev": "nodemon src/index.mjs",
     "db:migrate": "node src/db/migrate.js"
   },
   "dependencies": {
@@ -17,12 +17,13 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
+    "ffprobe-static": "^3.1.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.3",
     "resend": "^6.9.4",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

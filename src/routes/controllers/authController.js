@@ -55,7 +55,7 @@ const safeProfile = (p) => ({
 const register = async (req, res) => {
   if (!validate(req, res)) return
 
-  const { name, email, password } = req.body
+const { name, email, password, phone } = req.body
 
   // 1. Duplicate email check
   const { data: existing } = await supabase
@@ -76,17 +76,18 @@ const register = async (req, res) => {
 
   // 3. Create profile
   const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .insert({
-      full_name:         name,
-      email:             email.toLowerCase(),
-      password_hash,
-      role:              'client',
-      is_email_verified: true,
-      is_active:         true,
-    })
-    .select()
-    .single()
+  .from('profiles')
+  .insert({
+    full_name:         name,
+    email:             email.toLowerCase(),
+    password_hash,
+    phone:             phone || null,   // ← ADD THIS LINE
+    role:              'client',
+    is_email_verified: true,
+    is_active:         true,
+  })
+  .select()
+  .single()
 
   if (profileError) {
     console.error('register error:', profileError)
@@ -243,6 +244,41 @@ const refresh = async (req, res) => {
     refreshToken: newRefreshToken,
   })
 }
+
+// POST /auth/check-credentials
+// Validates email+password but issues NO tokens
+const checkCredentials = async (req, res) => {
+  const { email, password } = req.body
+  const INVALID = 'Invalid email or password.'
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, full_name, email, role, is_active, password_hash')
+    .eq('email', email.toLowerCase())
+    .maybeSingle()
+
+  if (!profile) return res.status(401).json({ message: INVALID })
+
+  const valid = await bcrypt.compare(password, profile.password_hash)
+  if (!valid) return res.status(401).json({ message: INVALID })
+
+  if (!profile.is_active) return res.status(403).json({ message: 'Account deactivated.' })
+
+  if (!['admin', 'staff', 'therapist'].includes(profile.role))
+    return res.status(403).json({ message: 'Staff access only.' })
+
+  return res.status(200).json({
+    success: true,
+    user: {
+      id:        profile.id,
+      full_name: profile.full_name,
+      email:     profile.email,
+      role:      profile.role,
+    }
+  })
+}
+
+
 
 // =============================================================================
 // POST /auth/logout
@@ -504,6 +540,7 @@ module.exports = {
   logout,
   logoutAll,
   verifyEmail,
+  checkCredentials,
   resendVerification,
   forgotPassword,
   resetPassword,

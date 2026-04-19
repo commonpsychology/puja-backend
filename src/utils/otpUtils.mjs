@@ -127,7 +127,7 @@ function emailHTML({ otp_type, otp, name }) {
 <table role="presentation" width="100%" style="max-width:560px;">
 
   <tr><td style="background:linear-gradient(135deg,${color},${accent});border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
-    <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Puja Samargi</h1>
+    <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Common Psychology</h1>
     <p style="margin:6px 0 0;color:rgba(255,255,255,0.75);font-size:12px;letter-spacing:0.12em;text-transform:uppercase;">
       ${isStaff ? 'Staff Portal' : 'Mental Health Platform · Nepal'}
     </p>
@@ -149,7 +149,7 @@ function emailHTML({ otp_type, otp, name }) {
       <tr><td style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;padding:14px 18px;">
         <p style="margin:0;font-size:13px;color:#92400e;line-height:1.6;">
           <strong>Security notice:</strong> Never share this code with anyone.
-          Puja Samargi staff will <strong>never</strong> ask for your OTP.
+          Common Psychology staff will <strong>never</strong> ask for your OTP.
         </p>
       </td></tr>
     </table>
@@ -158,7 +158,7 @@ function emailHTML({ otp_type, otp, name }) {
 
   <tr><td style="background:#f9fafb;border-radius:0 0 16px 16px;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center;">
     <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.7;">
-      &copy; ${new Date().getFullYear()} Puja Samargi &middot; Kathmandu, Nepal<br>
+      &copy; ${new Date().getFullYear()} Common Psychology &middot; Kathmandu, Nepal<br>
       This is an automated message &mdash; please do not reply.
     </p>
   </td></tr>
@@ -173,12 +173,12 @@ function emailHTML({ otp_type, otp, name }) {
 // ── SMS message ───────────────────────────────────────────────
 function smsText(otp_type, otp) {
   const m = {
-    email_verify:   `Puja Samargi code: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
-    phone_verify:   `Puja Samargi verification: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
-    staff_login:    `Puja Samargi staff login: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Not you? Contact admin.`,
-    password_reset: `Puja Samargi password reset: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
+    email_verify:   `Common Psychology code: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
+    phone_verify:   `Common Psychology verification: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
+    staff_login:    `Common Psychology staff login: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Not you? Contact admin.`,
+    password_reset: `Common Psychology password reset: ${otp}. Valid ${OTP_EXPIRY_MINUTES}min. Do not share.`,
   }
-  return m[otp_type] || `Your Puja Samargi code: ${otp}. Valid ${OTP_EXPIRY_MINUTES} minutes.`
+  return m[otp_type] || `Your Common Psychology code: ${otp}. Valid ${OTP_EXPIRY_MINUTES} minutes.`
 }
 
 // ================================================================
@@ -261,10 +261,10 @@ export async function sendOTP({
 
   // ── Send ─────────────────────────────────────────────────────
   const subjectMap = {
-    email_verify:   '[Puja Samargi] Verify your email address',
-    phone_verify:   '[Puja Samargi] Verify your phone number',
-    staff_login:    '[Puja Samargi] Staff login verification code',
-    password_reset: '[Puja Samargi] Reset your password',
+    email_verify:   '[Common Psychology] Verify your email address',
+    phone_verify:   '[Common Psychology] Verify your phone number',
+    staff_login:    '[Common Psychology] Staff login verification code',
+    password_reset: '[Common Psychology] Reset your password',
   }
 
   const errors = []
@@ -272,11 +272,11 @@ export async function sendOTP({
   if (channel === 'email' || channel === 'both') {
     try {
       await transporter.sendMail({
-        from:    `"Puja Samargi" <${process.env.SMTP_USER}>`,
+        from:    `"Common Psychology" <${process.env.SMTP_USER}>`,
         to:      email,
-        subject: subjectMap[otp_type] || '[Puja Samargi] Your verification code',
+        subject: subjectMap[otp_type] || '[Common Psychology] Your verification code',
         html:    emailHTML({ otp_type, otp, name }),
-        text:    `Your Puja Samargi code: ${otp}\nExpires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.`,
+        text:    `Your Common Psychology code: ${otp}\nExpires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.`,
       })
       await audit({ otp_id: otpRow?.id, user_id, email, otp_type, action: 'sent', ip_address, user_agent, metadata: { channel: 'email' } })
     } catch (e) {

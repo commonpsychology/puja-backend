@@ -13,18 +13,14 @@ const {
 
 const router = express.Router()
 
-// 🔐 all routes require auth
+// ✅ Public — no auth needed to check which slots are taken
+router.get('/booked-slots', getBookedSlots)
+
+// 🔐 Everything below requires auth
 router.use(authenticate)
 
-// ============================================================
-// ✅ IMPORTANT: SPECIFIC ROUTES FIRST (avoid route conflicts)
-// ============================================================
-router.get('/booked-slots', getBookedSlots)
 router.get('/my-slots', getMySlots)
 
-// ============================================================
-// EXISTING ROUTES
-// ============================================================
 router.post('/', bookAppointment)
 router.get('/', listMyAppointments)
 

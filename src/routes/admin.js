@@ -133,17 +133,14 @@ router.patch ('/orders/:id/status', guard, setOrderStatus)
 router.put   ('/orders/:id',        guard, setOrderStatus)
 
 // ─── Payments ────────────────────────────────────────────────
-router.get   ('/payments',      guard, getPayments)
-router.put   ('/payments/:id',  guard, updatePaymentStatus)
-router.patch ('/payments/:id',  guard, updatePaymentStatus)
-
-// ─── Payment Confirmation ────────────────────────────────────
-router.get  ('/payments/all',             guard, getAllPaymentsAdmin)
+router.get  ('/payments/all',             guard, getAllPaymentsAdmin)  // ← MOVED UP
+router.get  ('/payments',                 guard, getPayments)
+router.put  ('/payments/:id',             guard, updatePaymentStatus)
+router.patch('/payments/:id',             guard, updatePaymentStatus)
 router.post ('/payments/:id/approve',     guard, approvePayment)
 router.post ('/payments/:id/reject',      guard, rejectPayment)
 router.post ('/payments/:id/cod-confirm', guard, confirmCOD)
 router.post ('/payments/:id/cod-flag',    guard, flagCOD)
-
 // ─── Volunteer Applications ──────────────────────────────────
 router.get   ('/volunteers',     guard, getVolunteerApplications)
 router.get   ('/volunteers/:id', guard, getVolunteerApplication)

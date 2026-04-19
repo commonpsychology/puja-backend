@@ -45,6 +45,7 @@ const coursesRoute        = require('./routes/coursesRoute')   // ← single dec
 const enrollmentsRoutes   = require('./routes/enrollmentsRoute') // ← single declaration
 const playlistsRoute       = require('./routes/playlistRoute')  // ← single declaration
 const attendanceRoutes     = require('./routes/attendanceRoutes') // ← single declaration 
+const dreamsRouter = require('./routes/dreamsRoute')  // ← single declaration
 const app  = express()
 const PORT = process.env.PORT || 5000
 
@@ -92,6 +93,7 @@ app.use('/api/psych',            psychRoute)
 app.use('/api/otp',              otpRoutes)
 app.use('/api/attendance',        attendanceRoutes) // ← single route for attendance-related endpoints
 app.use('/api/news',             newsRoutes)
+app.use('/api/dreams',           dreamsRouter)  // ← single route for dreams-related endpoints
 app.use('/api/blog',             blogRoutes)
 app.use('/api/playlists',        playlistsRoute)  // ← single route for playlists
 app.use('/api/research',         researchRoutes)

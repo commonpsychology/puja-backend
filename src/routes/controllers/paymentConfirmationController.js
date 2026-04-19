@@ -86,13 +86,17 @@ async function initiatePayment(req, res, next) {
     const userId = getUserId(req)
     if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
-    const {
-      appointmentId, orderId, amount, currency = 'NPR',
-      method, transactionId, gatewayResponse,
-      workshopId, courseId, referenceCode, notes,
-      // coupon support
-      coupon_code, couponCode,
-    } = req.body
+   const {
+  appointment_id, appointmentId,   // ← accept both
+  order_id,       orderId,         // ← accept both
+  amount, currency = 'NPR',
+  method, transactionId, gatewayResponse,
+  workshopId, courseId, referenceCode, notes,
+  coupon_code, couponCode,
+} = req.body
+
+const apptId   = appointment_id || appointmentId || null
+const orderIdN = order_id       || orderId       || null
 
     if (!amount || !method)
       return res.status(400).json({ success: false, message: 'amount and method are required.' })
@@ -149,7 +153,7 @@ async function initiatePayment(req, res, next) {
       couponId    = coupon.id
     }
 
-    const category = appointmentId ? 'appointment' : orderId ? 'order' : 'other'
+const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
 
     const initialStatus = method === 'cash' || method === 'cod'
       ? 'pending_cod'
@@ -168,8 +172,8 @@ async function initiatePayment(req, res, next) {
 
     const insertPayload = {
       client_id:        userId,
-      appointment_id:   appointmentId || null,
-      order_id:         orderId       || null,
+     appointment_id:   apptId,
+order_id:         orderIdN,
       coupon_id:        couponId,
       amount:           finalAmount,
       currency,
@@ -245,12 +249,14 @@ async function approvePayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-    if (payment.appointment_id) {
-      await supabase.from('appointments')
-        .update({ status: 'confirmed' })
-        .eq('id', payment.appointment_id)
-        .in('status', ['pending'])
-    }
+   if (payment.appointment_id) {
+  await supabase.from('appointments')
+    .update({
+      status:         'confirmed',
+      payment_status: 'paid',        // ← THE MISSING LINE
+    })
+    .eq('id', payment.appointment_id)
+}
     if (payment.order_id) {
       await supabase.from('orders')
         .update({ status: 'confirmed' })
@@ -295,6 +301,11 @@ async function rejectPayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
+    if (payment.appointment_id) {
+  await supabase.from('appointments')
+    .update({ payment_status: 'unpaid' })
+    .eq('id', payment.appointment_id)
+}
     // If payment had a coupon, release it back (unclaim)
     if (payment.coupon_id) {
       await supabase.from('coupons')
@@ -602,12 +613,100 @@ async function verifyPayment(req, res, next) {
   } catch (err) { next(err) }
 }
 
+async function updatePaymentStatus(req, res, next) {
+  try {
+    const adminId = getUserId(req)
+    const { id }  = req.params
+    const { status } = req.body
+
+    const ALLOWED = ['pending', 'completed', 'failed', 'refunded']
+    if (!status || !ALLOWED.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `status must be one of: ${ALLOWED.join(', ')}`,
+      })
+    }
+
+    // Fetch existing payment
+    const { data: payment, error: fetchErr } = await supabase
+      .from('payments').select('*').eq('id', id).single()
+    if (fetchErr || !payment)
+      return res.status(404).json({ success: false, message: 'Payment not found.' })
+
+    if (payment.status === status)
+      return res.status(200).json({ success: true, payment }) // already in target state, no-op
+
+    // Build update payload
+    const updatePayload = {
+      status,
+      ...(status === 'completed' ? { paid_at: new Date().toISOString() } : {}),
+      gateway_response: {
+        ...(payment.gateway_response || {}),
+        status_updated_by: adminId,
+        status_updated_at: new Date().toISOString(),
+      },
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('payments').update(updatePayload).eq('id', id).select().single()
+    if (updateErr) throw updateErr
+
+    // Map payment status → appointment payment_status
+    const apptPaymentStatus = {
+      completed: 'paid',
+      failed:    'failed',
+      refunded:  'refunded',
+      pending:   'pending',
+    }[status]
+
+    // Sync linked appointment
+    if (payment.appointment_id && apptPaymentStatus) {
+      const apptUpdate = { payment_status: apptPaymentStatus }
+      if (status === 'completed') apptUpdate.status = 'confirmed'
+      await supabase.from('appointments')
+        .update(apptUpdate)
+        .eq('id', payment.appointment_id)
+    }
+
+    // Sync linked order
+    if (payment.order_id && status === 'completed') {
+      await supabase.from('orders')
+        .update({ status: 'confirmed' })
+        .eq('id', payment.order_id)
+        .in('status', ['pending'])
+    }
+
+    // Release coupon if payment failed/refunded
+    if (['failed', 'refunded'].includes(status) && payment.coupon_id) {
+      await supabase.from('coupons')
+        .update({ used_by: null, used_at: null })
+        .eq('id', payment.coupon_id)
+    }
+
+    // Notify client on completion
+    if (status === 'completed') {
+      await sendNotification(payment.client_id, {
+        title:   '✅ Payment Confirmed!',
+        message: `Your payment of NPR ${Number(payment.amount).toLocaleString()} via ${payment.method} has been verified.`,
+        type:    'payment',
+        link:    '/portal',
+      })
+    }
+
+    await logAudit(adminId, 'PAYMENT_STATUS_UPDATED', 'payments', id, updatePayload)
+
+    return res.status(200).json({ success: true, payment: updated })
+  } catch (err) { next(err) }
+}
+
 module.exports = {
   initiatePayment,
   verifyPayment,
   validateCoupon,
   approvePayment,
   rejectPayment,
+    updatePaymentStatus,   
+
   confirmCOD,
   flagCOD,
   getAllPaymentsAdmin,

@@ -16,7 +16,7 @@ const listTherapists = async (req, res) => {
     .select(`
   id, license_type, specializations, experience_years, consultation_fee,
   session_duration, is_available, rating, total_reviews, languages_spoken,
-  avatar_url,
+  avatar_url, available_hours,
   profiles:user_id ( full_name, display_name, avatar_url, bio, city, country )
 `, { count: 'exact' })
     .eq('is_available', true)
@@ -51,6 +51,7 @@ const searchTherapists = async (req, res) => {
     .from('therapists')
     .select(`
       id, specializations, experience_years, consultation_fee, rating,
+      available_hours,
       profiles:user_id ( full_name, display_name, avatar_url, city )
     `)
     .eq('is_verified', true)

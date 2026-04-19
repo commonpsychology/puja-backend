@@ -75,14 +75,15 @@ const bookAppointment = async (req, res) => {
     const { data: appointment, error } = await supabase
       .from('appointments')
       .insert({
-        client_id: clientId,
-        therapist_id: therapistId,
-        scheduled_at: scheduledAt,
-        duration_minutes: therapist.session_duration || 60,
-        type,
-        notes,
-        status: 'pending'
-      })
+  client_id:        clientId,
+  therapist_id:     therapistId,
+  scheduled_at:     scheduledAt,
+  duration_minutes: therapist.session_duration || 60,
+  type,
+  notes,
+  status:           'pending',
+  payment_status:   'unpaid',    // ← always explicit on creation
+})
       .select()
       .single()
 

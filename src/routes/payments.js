@@ -13,6 +13,7 @@ const {
   rejectPayment,
   confirmCOD,
   flagCOD,
+  updatePaymentStatus,
 } = require('./controllers/paymentConfirmationController')
 
 const router = express.Router()
@@ -27,6 +28,7 @@ const adminOnly = (req, res, next) => {
 router.use(authenticate)
 
 // Admin routes
+router.put('/admin/:id',              adminOnly, updatePaymentStatus)  
 router.get('/admin/all',              adminOnly, getAllPaymentsAdmin)
 router.post('/admin/:id/approve',     adminOnly, approvePayment)
 router.post('/admin/:id/reject',      adminOnly, rejectPayment)

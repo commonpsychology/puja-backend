@@ -57,7 +57,8 @@ app.set('trust proxy', 1)
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
-  'http://localhost:3000',
+     'https://myweb.vercel.app',     // ← add your real frontend URL
+
 ].filter(Boolean)
 
 app.use(cors({

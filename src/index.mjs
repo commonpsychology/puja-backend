@@ -57,7 +57,7 @@ app.set('trust proxy', 1)
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
-     'commonpsychology-o2ahihj9x-commonpsychologys-projects.vercel.app',    
+     'https://commonpsychology.vercel.app/',    
 ].filter(Boolean)
 
 app.use(cors({

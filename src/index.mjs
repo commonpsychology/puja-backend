@@ -57,7 +57,7 @@ app.set('trust proxy', 1)
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
-     'https://commonpsychology.vercel.app/',    
+  'https://commonpsychology.vercel.app',   // ✅ no trailing slash
 ].filter(Boolean)
 
 app.use(cors({
@@ -70,6 +70,9 @@ app.use(cors({
   methods:        ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
+
+// ✅ Handle preflight requests for all routes
+app.options('*', cors())
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10kb' }))

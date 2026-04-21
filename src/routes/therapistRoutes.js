@@ -4,8 +4,7 @@ const router  = express.Router()
 
 const { authenticate }               = require('../middleware/auth')
 const { getMyTherapistAppointments } = require('./controllers/adminController')
-const { getAppointmentNote, upsertAppointmentNote } = require('src/routes/controllers/communityController.js')
-
+const { getAppointmentNote, upsertAppointmentNote } = require('./controllers/communityController')
 // Supabase client (reuse same pattern as other controllers)
 const { createClient } = require('@supabase/supabase-js')
 const supabase = createClient(

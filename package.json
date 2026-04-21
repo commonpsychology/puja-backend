@@ -1,7 +1,7 @@
 {
-  "name": "puja-samargi-backend",
+  "name": "backend",
   "version": "1.0.0",
-  "description": "Backend API for Puja Samargi Mental Wellness Center",
+  "description": "Backend API for  Mental Wellness Center",
   "main": "src/index.mjs",
   "scripts": {
     "start": "node src/index.mjs",

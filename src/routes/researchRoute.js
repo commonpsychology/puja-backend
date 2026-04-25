@@ -5,6 +5,7 @@ const ctrl     = require('./controllers/research_Controller')
 const { protect, isAdmin } = require('../middleware/auth')
 const { supabase } = require('../db/supabase') // ← import your supabase client
 
+router.get('/:id/pdf', ctrl.proxyPdf)   
 // ── Public ────────────────────────────────────────────────────
 router.get('/',       ctrl.getPapers)
 router.get('/types',  ctrl.getTypes)   // static BEFORE /:id

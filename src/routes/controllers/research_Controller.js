@@ -134,10 +134,43 @@ const deletePaper = async (req, res) => {
   }
 }
 
+// GET /api/research/:id/pdf  ← streams PDF through your backend, fixing CORS + CSP
+const proxyPdf = async (req, res) => {
+  try {
+    const { data: paper, error } = await supabase
+      .from('research_papers')
+      .select('pdf_url, title')
+      .eq('id', req.params.id)
+      .single()
+
+    if (error || !paper?.pdf_url) {
+      return res.status(404).json({ success: false, message: 'PDF not found' })
+    }
+
+    const upstream = await fetch(paper.pdf_url)
+    if (!upstream.ok) {
+      return res.status(502).json({ success: false, message: 'Could not fetch PDF from storage' })
+    }
+
+    const filename = paper.pdf_url.split('/').pop() || `${paper.title ?? 'paper'}.pdf`
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`)
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+
+    // Stream directly — no buffering the whole file in memory
+    const { Readable } = require('stream')
+    Readable.fromWeb(upstream.body).pipe(res)
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+}
+
 module.exports = {
   getPapers,
   getTypes,
   getStats,
+  proxyPdf,
   getPaperById,
   createPaper,
   updatePaper,

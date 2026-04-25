@@ -51,6 +51,7 @@ const app  = express()
 const PORT = process.env.PORT || 5000
 
 // ── Security & CORS ───────────────────────────────────────────────────────────
+// AFTER
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: {
@@ -64,9 +65,11 @@ app.use(helmet({
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      // Allow your frontend to embed this backend in an iframe
+      frameAncestors: ["'self'", "https://commonpsychology.vercel.app"],
     },
   },
-})),
+}))
 app.set('trust proxy', 1)
 
 const allowedOrigins = [

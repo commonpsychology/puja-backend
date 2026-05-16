@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
 })
 
 // GET /api/workshops/my-registrations?email=you@email.com
-// ⚠️ MUST be before /:id or Express will treat "my-registrations" as an id
+// ⚠️ MUST be before /:id
 router.get('/my-registrations', async (req, res) => {
   const email = (req.query.email || '').trim().toLowerCase()
   if (!email || !email.includes('@')) {
@@ -84,6 +84,7 @@ router.get('/:id', async (req, res) => {
 })
 
 // POST /api/workshops/register
+// FIX 2: Returns full registration object on 409 so frontend can resume payment
 router.post('/register', async (req, res) => {
   const { workshop_id, attendee_name, attendee_email, attendee_phone, notes, payment_ref } = req.body
   if (!workshop_id || !attendee_name || !attendee_email || !attendee_phone) {
@@ -101,14 +102,25 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ success: false, error: 'Workshop is full' })
     }
 
+    // FIX 2: Check for existing registration and return FULL object so
+    // frontend ensureRegistration() can reuse the id for payment
     const { data: existing } = await supabase
       .from('workshop_registrations')
-      .select('id, payment_status')
+      .select('id, payment_status, status')
       .eq('workshop_id', workshop_id)
-      .eq('attendee_email', attendee_email)
+      .eq('attendee_email', attendee_email.trim().toLowerCase())
       .maybeSingle()
+
     if (existing) {
-      return res.status(409).json({ success: false, error: 'Already registered with this email', registration: existing })
+      return res.status(409).json({
+        success: false,
+        error: 'Already registered with this email',
+        registration: {
+          id:             existing.id,
+          payment_status: existing.payment_status,
+          status:         existing.status,
+        },
+      })
     }
 
     const isFree = ws.price === 0
@@ -116,9 +128,9 @@ router.post('/register', async (req, res) => {
       .from('workshop_registrations')
       .insert({
         workshop_id,
-        attendee_name,
-        attendee_email,
-        attendee_phone,
+        attendee_name:  attendee_name.trim(),
+        attendee_email: attendee_email.trim().toLowerCase(),
+        attendee_phone: attendee_phone.trim(),
         notes:          notes || '',
         is_free:        isFree,
         payment_status: isFree ? 'free' : (payment_ref ? 'paid' : 'pending'),
@@ -135,20 +147,48 @@ router.post('/register', async (req, res) => {
 })
 
 // PATCH /api/workshops/registration/:id/payment
+// FIX 3: Was returning 500 because 'status' column may not exist — only update
+// payment_status and payment_ref which are the actual columns
 router.patch('/registration/:id/payment', async (req, res) => {
   const { payment_status, payment_ref } = req.body
+  const { id } = req.params
+
+  if (!payment_status) {
+    return res.status(400).json({ success: false, error: 'payment_status is required' })
+  }
+
   try {
+    // First verify the registration exists
+    const { data: existing, error: fetchErr } = await supabase
+      .from('workshop_registrations')
+      .select('id, status')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (fetchErr) throw fetchErr
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Registration not found' })
+    }
+
+    const updates = { payment_status }
+    if (payment_ref) updates.payment_ref = payment_ref
+
+    // Also update status to confirmed when payment is marked paid
+    if (payment_status === 'paid' || payment_status === 'confirmed') {
+      updates.status = 'confirmed'
+    }
+
     const { data, error } = await supabase
       .from('workshop_registrations')
-      .update({ payment_status, payment_ref })
-      .eq('id', req.params.id)
+      .update(updates)
+      .eq('id', id)
       .select()
       .single()
     if (error) throw error
     res.json({ success: true, registration: data })
   } catch (err) {
     console.error('[PATCH /workshops/registration/:id/payment]', err.message)
-    res.status(500).json({ success: false, error: 'Failed to update payment' })
+    res.status(500).json({ success: false, error: err.message || 'Failed to update payment' })
   }
 })
 
@@ -189,7 +229,8 @@ router.post('/admin', async (req, res) => {
   try {
     const allowed = [
       'title', 'facilitator', 'date', 'time', 'seats', 'price',
-      'mode', 'tags', 'description', 'color', 'emoji', 'sort_order', 'is_active',
+      'mode', 'tags', 'description', 'color', 'emoji', 'sort_order',
+      'is_active', 'image_url',
     ]
     const payload = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
@@ -211,15 +252,20 @@ router.post('/admin', async (req, res) => {
   }
 })
 
-// PATCH /api/workshops/admin/reg/:id — confirm or cancel a registration
-// Declared BEFORE /admin/:id so Express never mistakes "reg" for a workshop id
-router.patch('/admin/reg/:id', async (req, res) => {
-  const { status } = req.body
-  const { id }     = req.params
+// ── FIX 1: PATCH /api/workshops/admin/registrations/:id ───────────────────
+// Frontend calls /admin/registrations/:id — backend only had /admin/reg/:id
+// This is the CORRECT route the admin dashboard uses to confirm/cancel registrations
+// Declared BEFORE /admin/:id so Express doesn't treat "registrations" as a workshop id
+router.patch('/admin/registrations/:id', async (req, res) => {
+  const { status, payment_status } = req.body
+  const { id } = req.params
 
-  const allowed = ['confirmed', 'cancelled', 'pending']
-  if (!allowed.includes(status)) {
-    return res.status(400).json({ success: false, error: `Invalid status. Allowed: ${allowed.join(', ')}` })
+  const allowedStatuses = ['confirmed', 'cancelled', 'pending']
+  if (status && !allowedStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}`,
+    })
   }
 
   try {
@@ -233,9 +279,89 @@ router.patch('/admin/reg/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Registration not found' })
     }
 
-    const regUpdate = { status }
-    if (status === 'cancelled') regUpdate.payment_status = 'cancelled'
-    if (status === 'confirmed' && existing.is_free) regUpdate.payment_status = 'free'
+    // Build the update object
+    const regUpdate = {}
+    if (status) regUpdate.status = status
+
+    // Derive payment_status from status if not explicitly provided
+    if (payment_status) {
+      regUpdate.payment_status = payment_status
+    } else if (status === 'cancelled') {
+      regUpdate.payment_status = 'cancelled'
+    } else if (status === 'confirmed' && existing.is_free) {
+      regUpdate.payment_status = 'free'
+    } else if (status === 'confirmed' && !existing.is_free) {
+      regUpdate.payment_status = 'paid'
+    }
+
+    const { data: reg, error: updateErr } = await supabase
+      .from('workshop_registrations')
+      .update(regUpdate)
+      .eq('id', id)
+      .select('*, workshops(title)')
+      .single()
+    if (updateErr) throw updateErr
+
+    // Send notification if user_id exists
+    if (existing.user_id) {
+      const workshopTitle = existing.workshops?.title || 'the workshop'
+      const isConfirmed   = status === 'confirmed'
+      await supabase.from('notifications').insert({
+        user_id: existing.user_id,
+        title:   isConfirmed ? 'Registration Confirmed 🎉' : 'Registration Cancelled',
+        message: isConfirmed
+          ? `Your spot in "${workshopTitle}" is confirmed! We look forward to seeing you.`
+          : `Your registration for "${workshopTitle}" has been cancelled. Contact us if this was unexpected.`,
+        type:    'system',
+        is_read: false,
+      }).catch(e => console.warn('[notifications insert]', e.message))
+    }
+
+    res.json({ success: true, registration: reg })
+  } catch (err) {
+    console.error('[PATCH /workshops/admin/registrations/:id]', err.message)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// Keep the old /admin/reg/:id route as a redirect alias so nothing breaks
+// if any other code still calls the old path
+router.patch('/admin/reg/:id', async (req, res) => {
+  // Forward to the new handler by mutating params and re-using same logic
+  req.params.id = req.params.id
+  const { status, payment_status } = req.body
+  const { id } = req.params
+
+  const allowedStatuses = ['confirmed', 'cancelled', 'pending']
+  if (status && !allowedStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid status. Allowed: ${allowedStatuses.join(', ')}`,
+    })
+  }
+
+  try {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('workshop_registrations')
+      .select('*, workshops(title)')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr || !existing) {
+      return res.status(404).json({ success: false, error: 'Registration not found' })
+    }
+
+    const regUpdate = {}
+    if (status) regUpdate.status = status
+    if (payment_status) {
+      regUpdate.payment_status = payment_status
+    } else if (status === 'cancelled') {
+      regUpdate.payment_status = 'cancelled'
+    } else if (status === 'confirmed' && existing.is_free) {
+      regUpdate.payment_status = 'free'
+    } else if (status === 'confirmed' && !existing.is_free) {
+      regUpdate.payment_status = 'paid'
+    }
 
     const { data: reg, error: updateErr } = await supabase
       .from('workshop_registrations')
@@ -253,10 +379,10 @@ router.patch('/admin/reg/:id', async (req, res) => {
         title:   isConfirmed ? 'Registration Confirmed 🎉' : 'Registration Cancelled',
         message: isConfirmed
           ? `Your spot in "${workshopTitle}" is confirmed! We look forward to seeing you.`
-          : `Your registration for "${workshopTitle}" has been cancelled. Contact us if this was unexpected.`,
+          : `Your registration for "${workshopTitle}" has been cancelled.`,
         type:    'system',
         is_read: false,
-      })
+      }).catch(e => console.warn('[notifications insert]', e.message))
     }
 
     res.json({ success: true, registration: reg })
@@ -272,7 +398,8 @@ router.patch('/admin/:id', async (req, res) => {
   try {
     const allowed = [
       'title', 'facilitator', 'date', 'time', 'seats', 'price',
-      'mode', 'tags', 'description', 'color', 'emoji', 'sort_order', 'is_active',
+      'mode', 'tags', 'description', 'color', 'emoji', 'sort_order',
+      'is_active', 'image_url',
     ]
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))

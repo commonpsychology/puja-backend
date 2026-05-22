@@ -105,70 +105,33 @@ async function verifyWithEsewa(transactionUuid, totalAmount) {
   // status === 'COMPLETE' means verified
 }
 
-// ── HELPER: Downstream actions after payment confirmed ────────
 async function handlePaymentSuccess(payment) {
-  const meta = payment.metadata || {}
-
-  // 1. Appointments
-  if (payment.category === 'appointment' && meta.appointment_id) {
+  // appointment_id and order_id are direct columns now, not in metadata
+  if (payment.appointment_id) {
     await supabase
       .from('appointments')
       .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-      .eq('id', meta.appointment_id)
+      .eq('id', payment.appointment_id)
   }
 
-  // 2. Orders
-  if (payment.category === 'order' && meta.order_id) {
+  if (payment.order_id) {
     await supabase
       .from('orders')
       .update({ status: 'confirmed', updated_at: new Date().toISOString() })
-      .eq('id', meta.order_id)
+      .eq('id', payment.order_id)
   }
 
-  // 3. Course enrollments
-  if (payment.category === 'course' && meta.enrollment_id) {
-    await supabase
-      .from('enrollments')
-      .update({
-        payment_status: 'confirmed',
-        confirmed_at:   new Date().toISOString(),
-      })
-      .eq('id', meta.enrollment_id)
-  }
-
-  // 4. Community group memberships
-  if (payment.category === 'community_group_membership' && meta.membership_id) {
-    await supabase
-      .from('group_memberships')
-      .update({
-        payment_status: 'paid',
-        confirmed_at:   new Date().toISOString(),
-      })
-      .eq('id', meta.membership_id)
-  }
-
-  // 5. Community session reservations
-  if (payment.category === 'community_session' && meta.reservation_id) {
-    await supabase
-      .from('group_reservations')
-      .update({
-        payment_status: 'paid',
-        confirmed_at:   new Date().toISOString(),
-      })
-      .eq('id', meta.reservation_id)
-  }
-
-  // 6. Send in-app notification
+  // notification
   try {
     await supabase.from('notifications').insert({
-      user_id: payment.user_id,
+      user_id: payment.client_id,
       type:    'payment',
       title:   '✅ Payment Confirmed',
       message: `Your payment of NPR ${Number(payment.amount).toLocaleString()} via eSewa has been verified.`,
       is_read: false,
     })
-  } catch (notifErr) {
-    console.warn('[eSewa] Notification insert failed (non-fatal):', notifErr.message)
+  } catch (e) {
+    console.warn('[eSewa] Notification failed (non-fatal):', e.message)
   }
 }
 
@@ -221,23 +184,24 @@ router.post('/initiate', requireAuth, async (req, res) => {
     // ── Generate unique transaction UUID ──────────────────
     const transactionUuid = generateTxnUuid(req.user.id)
 
-    // ── Create PENDING payment record in DB ───────────────
     const { data: payment, error: insertErr } = await supabase
-      .from('payments')
-      .insert({
-        user_id:        req.user.id,
-        amount:         finalAmount,
-        method:         'esewa',
-        status:         'pending',
-        currency:       'NPR',
-        category:       category,
-        transaction_id: transactionUuid,
-        metadata:       metadata || {},
-        created_at:     new Date().toISOString(),
-      })
-      .select()
-      .single()
-
+  .from('payments')
+  .insert({
+    client_id:      req.user.id,
+    amount:         finalAmount,
+    method:         'esewa',
+    status:         'pending',
+    currency:       'NPR',
+    category:       category,
+    transaction_id: transactionUuid,
+    // link to appointment/order if provided in metadata
+    appointment_id: metadata?.appointment_id || null,
+    order_id:       metadata?.order_id       || null,
+    room_booking_id:metadata?.room_booking_id|| null,
+    coupon_id:      couponData?.id           || null,
+  })
+  .select()
+  .single()
     if (insertErr) throw new Error('Failed to create payment record: ' + insertErr.message)
 
     // ── Generate HMAC signature ───────────────────────────

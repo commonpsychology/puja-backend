@@ -232,7 +232,6 @@ router.post('/initiate', requireAuth, async (req, res) => {
         currency:       'NPR',
         category:       category,
         transaction_id: transactionUuid,
-        coupon_code:    couponData?.code || null,
         metadata:       metadata || {},
         created_at:     new Date().toISOString(),
       })

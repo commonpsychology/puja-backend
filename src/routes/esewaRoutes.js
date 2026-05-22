@@ -37,7 +37,7 @@ const supabase = createClient(
 const IS_LIVE        = process.env.ESEWA_ENV === 'live'
 const MERCHANT_ID    = process.env.ESEWA_MERCHANT_ID   || 'EPAYTEST'
 const SECRET_KEY     = process.env.ESEWA_SECRET_KEY    || '8gBm/:&EnhH.1/q'
-const FRONTEND_URL   = process.env.FRONTEND_URL        || 'http://localhost:5173'
+const FRONTEND_URL   = process.env.FRONTEND_URL        || 'https://commonpsychology.vercel.app'
 
 // eSewa official URLs
 const ESEWA_FORM_URL = IS_LIVE
@@ -206,6 +206,14 @@ router.post('/initiate', requireAuth, async (req, res) => {
 
     // ── Generate HMAC signature ───────────────────────────
     const signature = generateSignature(finalAmount, transactionUuid, MERCHANT_ID)
+
+    console.log('[eSewa initiate] form_fields:', {
+  total_amount:     String(finalAmount),
+  transaction_uuid: transactionUuid,
+  product_code:     MERCHANT_ID,
+  signature:        signature,
+  secret_used:      SECRET_KEY,
+})
 
     // ── Return signed form data to frontend ──────────────
     return res.json({

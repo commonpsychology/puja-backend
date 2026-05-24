@@ -267,6 +267,111 @@ router.post  ('/group-sessions',     guard, adminCreateSessionFull)
 router.put   ('/group-sessions/:id', guard, adminUpdateSession)
 router.delete('/group-sessions/:id', guard, adminDeleteSession)
 
+
+
+router.get('/delivery-riders', guard, async (req, res, next) => {
+  try {
+    const { is_active, limit = 200 } = req.query
+    let q = supabase
+      .from('delivery_riders')
+      .select(`id, user_id, full_name, email, phone,
+               vehicle_type, vehicle_number, area,
+               is_active, total_delivered, total_failed, created_at`)
+      .order('created_at', { ascending: false })
+      .limit(Number(limit))
+
+    if (is_active !== undefined) q = q.eq('is_active', is_active === 'true')
+
+    const { data, error } = await q
+    if (error) throw error
+    res.json({ riders: data || [], total: data?.length || 0 })
+  } catch (err) { next(err) }
+})
+
+router.post('/delivery-riders', guard, async (req, res, next) => {
+  try {
+    const {
+      full_name, email, phone, password,
+      vehicle_type, vehicle_number, area, notes,
+    } = req.body
+
+    if (!full_name?.trim()) return res.status(400).json({ message: 'Full name is required.' })
+    if (!email?.trim())     return res.status(400).json({ message: 'Email is required.' })
+    if (!password)          return res.status(400).json({ message: 'Password is required.' })
+    if (!area?.trim())      return res.status(400).json({ message: 'Delivery area is required.' })
+
+    // 1. Create auth user via Supabase Admin API
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email:          email.trim().toLowerCase(),
+        password,
+        email_confirm:  true,
+        user_metadata:  { full_name: full_name.trim(), role: 'rider' },
+      })
+    if (authError) return res.status(400).json({ message: authError.message })
+
+    const userId = authData.user.id
+
+    // 2. Insert into profiles (same as registerStaff does)
+    // 2. Insert into profiles
+const { error: profileError } = await supabase
+  .from('profiles')
+  .insert({
+    id:        userId,        // ← profiles PK is 'id', mirrors auth.users.id
+    full_name: full_name.trim(),
+    email:     email.trim().toLowerCase(),
+    phone:     phone?.trim() || null,
+    role:      'rider',       // ← critical, used by check-credentials to gate portal access
+    is_active: true,
+  })
+    if (profileError) {
+      // Roll back auth user if profile insert fails
+      await supabase.auth.admin.deleteUser(userId)
+      return res.status(500).json({ message: profileError.message })
+    }
+
+    // 3. Insert into delivery_riders  ← the missing piece
+    //    NOTE: user_id is the FK (delivery.js getRider uses .eq('user_id', ...))
+    const { data: riderRow, error: riderError } = await supabase
+      .from('delivery_riders')
+      .insert({
+        user_id:        userId,          // FK → profiles.id / auth.users.id
+        full_name:      full_name.trim(),
+        email:          email.trim().toLowerCase(),
+        phone:          phone?.trim()          || null,
+        vehicle_type:   vehicle_type           || null,
+        vehicle_number: vehicle_number?.trim() || null,
+        area:           area.trim(),
+        notes:          notes?.trim()          || null,
+        is_active:      true,
+        is_available:   true,
+        total_delivered: 0,
+        total_failed:    0,
+      })
+      .select()
+      .single()
+
+    if (riderError) {
+      // Roll back both auth user and profile
+      await supabase.from('profiles').delete().eq('id', userId)
+      await supabase.auth.admin.deleteUser(userId)
+      return res.status(500).json({ message: riderError.message })
+    }
+
+    return res.status(201).json({
+      message: 'Delivery rider registered successfully.',
+      rider: {
+        id:           riderRow.id,
+        user_id:      userId,
+        full_name:    full_name.trim(),
+        email:        email.trim().toLowerCase(),
+        area:         area.trim(),
+        vehicle_type: vehicle_type || null,
+      },
+    })
+  } catch (err) { next(err) }
+})
+
 // ─── Group Reservations ──────────────────────────────────────
 router.get('/group-reservations',      guard, adminGetReservations)
 // ✅ NEW: frontend PUT /admin/group-reservations/:id for confirm/reject payment

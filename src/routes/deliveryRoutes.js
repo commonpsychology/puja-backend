@@ -58,40 +58,58 @@ async function getRider(req) {
 // POST /api/delivery/check-credentials
 // Validates email + password. Returns user info for the OTP modal.
 // Does NOT issue a token — that happens after verify-otp.
-// ─────────────────────────────────────────────────────────────
+// routes/delivery.js — replace ONLY the check-credentials handler
+
 router.post('/check-credentials', async (req, res) => {
   try {
     const { email, password } = req.body
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required.' })
 
-    const { data: profile, error } = await supabase
+    // ── Step 1: verify credentials via Supabase Auth ──────────
+    // (replaces the old bcrypt.compare against profiles.password_hash
+    //  which is always null when the user was created via admin.createUser)
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email:    email.trim().toLowerCase(),
+        password,
+      })
+
+    if (authError || !authData?.user)
+      return res.status(401).json({ message: 'Invalid email or password.' })
+
+    const userId = authData.user.id
+
+    // ── Step 2: check profiles row (role + is_active) ─────────
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, full_name, email, phone, password_hash, role, is_active')
-      .eq('email', email.trim().toLowerCase())
+      .select('id, full_name, email, phone, role, is_active')
+      .eq('id', userId)
       .single()
 
-    if (error || !profile)   return res.status(401).json({ message: 'Invalid email or password.' })
-    if (!profile.is_active)  return res.status(403).json({ message: 'Account is inactive. Contact admin.' })
+    if (profileError || !profile)
+      return res.status(401).json({ message: 'Profile not found.' })
+    if (!profile.is_active)
+      return res.status(403).json({ message: 'Account is inactive. Contact admin.' })
     if (profile.role !== 'rider')
       return res.status(403).json({ message: 'This portal is for delivery riders only.' })
 
+    // ── Step 3: check delivery_riders row ─────────────────────
     const { data: riderRow, error: rErr } = await supabase
       .from('delivery_riders')
       .select('id, is_active, area, vehicle_type, vehicle_number')
-      .eq('user_id', profile.id)
+      .eq('user_id', userId)          // ← matches your FK column name
       .single()
 
-    if (rErr || !riderRow)  return res.status(403).json({ message: 'Rider profile not set up. Contact admin.' })
-    if (!riderRow.is_active) return res.status(403).json({ message: 'Account is inactive. Contact admin.' })
+    if (rErr || !riderRow)
+      return res.status(403).json({ message: 'Rider profile not set up. Contact admin.' })
+    if (!riderRow.is_active)
+      return res.status(403).json({ message: 'Account is inactive. Contact admin.' })
 
-    const match = await bcrypt.compare(password, profile.password_hash)
-    if (!match) return res.status(401).json({ message: 'Invalid email or password.' })
-
-    // Return info needed by DeliveryOTPModal (user_id, email, name)
+    // ── Step 4: return user info for OTP modal ────────────────
     return res.status(200).json({
       user: {
-        id:        profile.id,   // → passed as user_id to send-otp / verify-otp
+        id:        profile.id,
         full_name: profile.full_name,
         email:     profile.email,
         phone:     profile.phone,

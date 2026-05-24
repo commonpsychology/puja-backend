@@ -331,43 +331,40 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
     // ✅ NO manual profiles.insert() — the DB trigger already created the row
 
     // 2. Insert into delivery_riders
-    const { data: riderRow, error: riderError } = await supabase
-      .from('delivery_riders')
-      .insert({
-        user_id:         userId,
-        full_name:       full_name.trim(),
-        email:           email.trim().toLowerCase(),
-        phone:           phone?.trim()          || null,
-        vehicle_type:    vehicle_type           || null,
-        vehicle_number:  vehicle_number?.trim() || null,
-        area:            area.trim(),
-        notes:           notes?.trim()          || null,
-        is_active:       true,
-        is_available:    true,
-        total_delivered: 0,
-        total_failed:    0,
-      })
-      .select()
-      .single()
+    // 2. Insert into delivery_riders (profiles row created by DB trigger)
+const { data: riderRow, error: riderError } = await supabase
+  .from('delivery_riders')
+  .insert({
+    user_id:         userId,
+    vehicle_type:    vehicle_type           || null,
+    vehicle_number:  vehicle_number?.trim() || null,
+    area:            area.trim(),
+    notes:           notes?.trim()          || null,
+    is_active:       true,
+    is_available:    true,
+    is_verified:     false,
+    total_delivered: 0,
+    total_failed:    0,
+  })
+  .select()
+  .single()
 
-    if (riderError) {
-      // Roll back auth user only — trigger cascade removes the profiles row
-      await supabase.auth.admin.deleteUser(userId)
-      return res.status(500).json({ message: riderError.message })
-    }
+if (riderError) {
+  await supabase.auth.admin.deleteUser(userId)
+  return res.status(500).json({ message: riderError.message })
+}
 
-    return res.status(201).json({
-      message: 'Delivery rider registered successfully.',
-      rider: {
-        id:           riderRow.id,
-        user_id:      userId,
-        full_name:    full_name.trim(),
-        email:        email.trim().toLowerCase(),
-        area:         area.trim(),
-        vehicle_type: vehicle_type || null,
-      },
-    })
-  } catch (err) { next(err) }
+return res.status(201).json({
+  message: 'Delivery rider registered successfully.',
+  rider: {
+    id:           riderRow.id,
+    user_id:      userId,
+    full_name:    full_name.trim(),
+    email:        email.trim().toLowerCase(),
+    area:         area.trim(),
+    vehicle_type: vehicle_type || null,
+  },
+})} catch (err) { next(err) }
 })
 
 router.get('/debug-supabase', guard, async (req, res) => {

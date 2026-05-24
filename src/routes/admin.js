@@ -288,7 +288,10 @@ router.get('/delivery-riders', guard, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-router.post('/delivery-riders', guard, async (req, res, next) => {
+router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, next) => {
+    if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Only admins can register delivery riders.' })
+  }
   try {
     const {
       full_name, email, phone, password,
@@ -313,16 +316,21 @@ router.post('/delivery-riders', guard, async (req, res, next) => {
     const userId = authData.user.id
 
     // 2. Insert into profiles (same as registerStaff does)
-    // 2. Insert into profiles
-const { error: profileError } = await supabase
-  .from('profiles')
-  .insert({
-    id:        userId,        // ← profiles PK is 'id', mirrors auth.users.id
-    full_name: full_name.trim(),
-    email:     email.trim().toLowerCase(),
-    phone:     phone?.trim() || null,
-    role:      'rider',       // ← critical, used by check-credentials to gate portal access
-    is_active: true,
+    const { error: profileError } = await supabase
+      .from('profiles')
+       .insert({
+    user_id:         userId,                      // ← FK to profiles.id
+    full_name:       full_name.trim(),
+    email:           email.trim().toLowerCase(),
+    phone:           phone?.trim()          || null,
+    vehicle_type:    vehicle_type           || null,
+    vehicle_number:  vehicle_number?.trim() || null,
+    area:            area.trim(),
+    notes:           notes?.trim()          || null,
+    is_active:       true,
+    is_available:    true,
+    total_delivered: 0,
+    total_failed:    0,
   })
     if (profileError) {
       // Roll back auth user if profile insert fails

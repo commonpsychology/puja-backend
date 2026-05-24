@@ -7,6 +7,9 @@
 //   4. Added PUT route for /group-reservations/:id (needed by frontend confirm/reject)
 //   5. adminGetSessions / adminCreateSessionFull / adminUpdateSession / adminDeleteSession
 //      kept as-is (they live in adminController)
+//   6. Removed manual profiles.insert() from POST /delivery-riders —
+//      a DB trigger on auth.users auto-creates the profiles row using user_metadata.
+//      Rollback also simplified (no profiles.delete needed).
 
 const express = require('express')
 const { authenticate } = require('../middleware/auth')
@@ -141,6 +144,7 @@ router.post ('/payments/:id/approve',     guard, approvePayment)
 router.post ('/payments/:id/reject',      guard, rejectPayment)
 router.post ('/payments/:id/cod-confirm', guard, confirmCOD)
 router.post ('/payments/:id/cod-flag',    guard, flagCOD)
+
 // ─── Volunteer Applications ──────────────────────────────────
 router.get   ('/volunteers',     guard, getVolunteerApplications)
 router.get   ('/volunteers/:id', guard, getVolunteerApplication)
@@ -226,6 +230,7 @@ router.post  ('/research',     guard, createResearch)
 router.put   ('/research/:id', guard, updateResearch)
 router.delete('/research/:id', guard, deleteResearch)
 
+// ─── Social Work Programs ────────────────────────────────────
 router.get   ('/social-work-programs',     guard, getSocialWorkPrograms)
 router.post  ('/social-work-programs',     guard, createSocialWorkProgram)
 router.put   ('/social-work-programs/:id', guard, updateSocialWorkProgram)
@@ -267,8 +272,7 @@ router.post  ('/group-sessions',     guard, adminCreateSessionFull)
 router.put   ('/group-sessions/:id', guard, adminUpdateSession)
 router.delete('/group-sessions/:id', guard, adminDeleteSession)
 
-
-
+// ─── Delivery Riders ─────────────────────────────────────────
 router.get('/delivery-riders', guard, async (req, res, next) => {
   try {
     const { is_active, limit = 200 } = req.query
@@ -292,9 +296,11 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
   console.log('SUPABASE_URL set:', !!process.env.SUPABASE_URL)
   console.log('SERVICE_KEY set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
   console.log('SERVICE_KEY starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20))
-    if (req.user.role !== 'admin') {
+
+  if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Only admins can register delivery riders.' })
   }
+
   try {
     const {
       full_name, email, phone, password,
@@ -306,50 +312,38 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
     if (!password)          return res.status(400).json({ message: 'Password is required.' })
     if (!area?.trim())      return res.status(400).json({ message: 'Delivery area is required.' })
 
-    // 1. Create auth user via Supabase Admin API
+    // 1. Create auth user — DB trigger auto-creates the profiles row
+    //    using user_metadata.full_name and user_metadata.role
     const { data: authData, error: authError } =
       await supabase.auth.admin.createUser({
-        email:          email.trim().toLowerCase(),
+        email:         email.trim().toLowerCase(),
         password,
-        email_confirm:  true,
-        user_metadata:  { full_name: full_name.trim(), role: 'rider' },
+        email_confirm: true,
+        user_metadata: {
+          full_name: full_name.trim(),
+          role:      'rider',   // ← trigger reads this and sets role in profiles
+        },
       })
     if (authError) return res.status(400).json({ message: authError.message })
 
     const userId = authData.user.id
 
-    // 2. Insert into profiles (same as registerStaff does)
-    const { error: profileError } = await supabase
-  .from('profiles')
-  .insert({
-    id:        userId,                        // ← PK, mirrors auth.users.id
-    full_name: full_name.trim(),
-    email:     email.trim().toLowerCase(),
-    phone:     phone?.trim() || null,
-    role:      'rider',                       // ← critical for portal gating
-    is_active: true,
-  })
-    if (profileError) {
-      // Roll back auth user if profile insert fails
-      await supabase.auth.admin.deleteUser(userId)
-      return res.status(500).json({ message: profileError.message })
-    }
+    // ✅ NO manual profiles.insert() — the DB trigger already created the row
 
-    // 3. Insert into delivery_riders  ← the missing piece
-    //    NOTE: user_id is the FK (delivery.js getRider uses .eq('user_id', ...))
+    // 2. Insert into delivery_riders
     const { data: riderRow, error: riderError } = await supabase
       .from('delivery_riders')
       .insert({
-        user_id:        userId,          // FK → profiles.id / auth.users.id
-        full_name:      full_name.trim(),
-        email:          email.trim().toLowerCase(),
-        phone:          phone?.trim()          || null,
-        vehicle_type:   vehicle_type           || null,
-        vehicle_number: vehicle_number?.trim() || null,
-        area:           area.trim(),
-        notes:          notes?.trim()          || null,
-        is_active:      true,
-        is_available:   true,
+        user_id:         userId,
+        full_name:       full_name.trim(),
+        email:           email.trim().toLowerCase(),
+        phone:           phone?.trim()          || null,
+        vehicle_type:    vehicle_type           || null,
+        vehicle_number:  vehicle_number?.trim() || null,
+        area:            area.trim(),
+        notes:           notes?.trim()          || null,
+        is_active:       true,
+        is_available:    true,
         total_delivered: 0,
         total_failed:    0,
       })
@@ -357,8 +351,7 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
       .single()
 
     if (riderError) {
-      // Roll back both auth user and profile
-      await supabase.from('profiles').delete().eq('id', userId)
+      // Roll back auth user only — trigger cascade removes the profiles row
       await supabase.auth.admin.deleteUser(userId)
       return res.status(500).json({ message: riderError.message })
     }
@@ -382,7 +375,7 @@ router.get('/debug-supabase', guard, async (req, res) => {
 
   // 1. Check env vars are present
   results.url_set         = !!process.env.SUPABASE_URL
-  results.service_key_set = !!process.pairing.SUPABASE_SERVICE_ROLE_KEY
+  results.service_key_set = !!process.env.SUPABASE_SERVICE_ROLE_KEY
   results.key_preview     = process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 40)
 
   // 2. Try listing auth users — only works with service role key
@@ -434,6 +427,7 @@ router.delete('/group-reservations/:id', guard, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
+// ─── Course Playlists ────────────────────────────────────────
 router.get('/course-playlists', guard, async (req, res, next) => {
   try {
     const { course_id, limit = 200, page = 1 } = req.query
@@ -488,34 +482,39 @@ router.get('/course-playlists', guard, async (req, res, next) => {
     })
   } catch (err) { next(err) }
 })
- 
+
 router.post('/course-playlists', guard, async (req, res, next) => {
   try {
     const { course_id, title, description, emoji, sort_order, is_published, access_pin } = req.body
     if (!course_id) return res.status(400).json({ success: false, message: 'course_id is required' })
     if (!title?.trim()) return res.status(400).json({ success: false, message: 'title is required' })
- 
-    const payload = { course_id, title: title.trim(), description: description || null, emoji: emoji || '📚', sort_order: sort_order ?? 0, is_published: is_published !== false }
- 
+
+    const payload = {
+      course_id,
+      title:        title.trim(),
+      description:  description || null,
+      emoji:        emoji || '📚',
+      sort_order:   sort_order ?? 0,
+      is_published: is_published !== false,
+    }
+
     // Hash PIN with pgcrypto if provided
     if (access_pin?.trim()) {
-      // Use supabase RPC to hash (pgcrypto crypt is only available server-side via RPC or SQL)
-      // Simple option: store raw and let DB trigger hash it, OR call DB function:
       const { data: hashed, error: hErr } = await supabase.rpc('hash_playlist_pin', { p_pin: access_pin.trim() })
       if (hErr) {
-        // Fallback: store as-is if RPC not available (create the RPC below)
+        // Fallback: store as-is if RPC not available
         payload.access_pin = access_pin.trim()
       } else {
         payload.access_pin = hashed
       }
     }
- 
+
     const { data, error } = await supabase.from('course_playlists').insert(payload).select().single()
     if (error) throw error
     res.status(201).json({ success: true, playlist: data })
   } catch (err) { next(err) }
 })
- 
+
 router.put('/course-playlists/:id', guard, async (req, res, next) => {
   try {
     const allowed = ['title', 'description', 'emoji', 'sort_order', 'is_published']
@@ -523,7 +522,7 @@ router.put('/course-playlists/:id', guard, async (req, res, next) => {
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
- 
+
     // PIN update: hash if provided, remove if explicitly passed as empty string
     if (req.body.access_pin !== undefined) {
       const pin = req.body.access_pin?.trim()
@@ -535,10 +534,10 @@ router.put('/course-playlists/:id', guard, async (req, res, next) => {
         updates.access_pin = null
       }
     }
- 
+
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ success: false, message: 'No fields to update' })
- 
+
     const { data, error } = await supabase
       .from('course_playlists')
       .update(updates)
@@ -549,20 +548,19 @@ router.put('/course-playlists/:id', guard, async (req, res, next) => {
     res.json({ success: true, playlist: data })
   } catch (err) { next(err) }
 })
- 
+
 router.delete('/course-playlists/:id', guard, async (req, res, next) => {
   try {
-    // Unlink videos from this playlist (ON DELETE SET NULL handles this automatically
-    // via the FK, but we make it explicit so videos aren't accidentally orphaned silently)
+    // Unlink videos from this playlist before deleting
     await supabase.from('course_videos').update({ playlist_id: null }).eq('playlist_id', req.params.id)
- 
+
     const { error } = await supabase.from('course_playlists').delete().eq('id', req.params.id)
     if (error) throw error
     res.json({ success: true, message: 'Playlist deleted. Videos have been unlinked.' })
   } catch (err) { next(err) }
 })
- 
-// ─── Course Videos ───────────────────────────────────────────────────────────
+
+// ─── Course Videos ───────────────────────────────────────────
 router.get('/course-videos', guard, async (req, res, next) => {
   try {
     const { course_id, playlist_id, limit = 200, page = 1 } = req.query
@@ -571,23 +569,23 @@ router.get('/course-videos', guard, async (req, res, next) => {
       .select('*', { count: 'exact' })
       .order('sort_order', { ascending: true })
       .range((page - 1) * limit, page * limit - 1)
- 
+
     if (course_id)   query = query.eq('course_id', course_id)
     if (playlist_id) query = query.eq('playlist_id', playlist_id)
- 
+
     const { data, error, count } = await query
     if (error) throw error
     res.json({ success: true, items: data || [], total: count || 0, pagination: { page: +page, limit: +limit, total: count || 0 } })
   } catch (err) { next(err) }
 })
- 
+
 router.post('/course-videos', guard, async (req, res, next) => {
   try {
     const { course_id, playlist_id, title, description, video_url, thumbnail_url, duration_secs, sort_order, is_free_preview } = req.body
-    if (!course_id)        return res.status(400).json({ success: false, message: 'course_id is required' })
-    if (!title?.trim())    return res.status(400).json({ success: false, message: 'title is required' })
+    if (!course_id)         return res.status(400).json({ success: false, message: 'course_id is required' })
+    if (!title?.trim())     return res.status(400).json({ success: false, message: 'title is required' })
     if (!video_url?.trim()) return res.status(400).json({ success: false, message: 'video_url is required' })
- 
+
     const { data, error } = await supabase.from('course_videos').insert({
       course_id,
       playlist_id:     playlist_id || null,
@@ -599,12 +597,12 @@ router.post('/course-videos', guard, async (req, res, next) => {
       sort_order:      sort_order != null ? Number(sort_order) : 0,
       is_free_preview: is_free_preview === true,
     }).select().single()
- 
+
     if (error) throw error
     res.status(201).json({ success: true, video: data })
   } catch (err) { next(err) }
 })
- 
+
 router.put('/course-videos/:id', guard, async (req, res, next) => {
   try {
     const allowed = ['course_id', 'playlist_id', 'title', 'description', 'video_url', 'thumbnail_url', 'duration_secs', 'sort_order', 'is_free_preview']
@@ -618,7 +616,7 @@ router.put('/course-videos/:id', guard, async (req, res, next) => {
     }
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ success: false, message: 'No fields to update' })
- 
+
     const { data, error } = await supabase
       .from('course_videos')
       .update(updates)
@@ -629,7 +627,7 @@ router.put('/course-videos/:id', guard, async (req, res, next) => {
     res.json({ success: true, video: data })
   } catch (err) { next(err) }
 })
- 
+
 router.delete('/course-videos/:id', guard, async (req, res, next) => {
   try {
     const { error } = await supabase.from('course_videos').delete().eq('id', req.params.id)

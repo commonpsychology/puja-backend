@@ -289,6 +289,9 @@ router.get('/delivery-riders', guard, async (req, res, next) => {
 })
 
 router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, next) => {
+  console.log('SUPABASE_URL set:', !!process.env.SUPABASE_URL)
+  console.log('SERVICE_KEY set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
+  console.log('SERVICE_KEY starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20))
     if (req.user.role !== 'admin') {
     return res.status(403).json({ message: 'Only admins can register delivery riders.' })
   }

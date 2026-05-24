@@ -377,6 +377,29 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
   } catch (err) { next(err) }
 })
 
+router.get('/debug-supabase', guard, async (req, res) => {
+  const results = {}
+
+  // 1. Check env vars are present
+  results.url_set         = !!process.env.SUPABASE_URL
+  results.service_key_set = !!process.pairing.SUPABASE_SERVICE_ROLE_KEY
+  results.key_preview     = process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 40)
+
+  // 2. Try listing auth users — only works with service role key
+  const { data: authData, error: authError } =
+    await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+  results.auth_admin_works = !authError
+  results.auth_error       = authError?.message || null
+
+  // 3. Try reading profiles table
+  const { data: profileData, error: profileError } =
+    await supabase.from('profiles').select('id').limit(1)
+  results.profiles_readable = !profileError
+  results.profiles_error    = profileError?.message || null
+
+  res.json(results)
+})
+
 // ─── Group Reservations ──────────────────────────────────────
 router.get('/group-reservations',      guard, adminGetReservations)
 // ✅ NEW: frontend PUT /admin/group-reservations/:id for confirm/reject payment

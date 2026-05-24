@@ -392,6 +392,95 @@ router.get('/debug-supabase', guard, async (req, res) => {
 
   res.json(results)
 })
+// ─── TEMP DEBUG: remove after fixing ─────────────────────────
+router.post('/debug-create-rider', guard, async (req, res) => {
+  const results = {}
+
+  // Step 1: can we call auth.admin at all?
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+    results.step1_auth_admin = error ? `FAIL: ${error.message}` : 'OK'
+  } catch (e) { results.step1_auth_admin = `THROW: ${e.message}` }
+
+  // Step 2: try creating a test auth user
+  const testEmail = `test_rider_debug_${Date.now()}@debugtest.com`
+  let testUserId = null
+  try {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email:         testEmail,
+      password:      'TestPass123!',
+      email_confirm: true,
+      user_metadata: { full_name: 'Debug Rider', role: 'rider' },
+    })
+    if (error) {
+      results.step2_createUser = `FAIL: ${error.message}`
+    } else {
+      testUserId = data.user.id
+      results.step2_createUser = `OK — userId: ${testUserId}`
+    }
+  } catch (e) { results.step2_createUser = `THROW: ${e.message}` }
+
+  // Step 3: did a profiles row get auto-created? (trigger check)
+  if (testUserId) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, role, is_active')
+        .eq('id', testUserId)
+        .single()
+      results.step3_profile_exists = error
+        ? `NOT FOUND (no trigger): ${error.message}`
+        : `AUTO-CREATED: ${JSON.stringify(data)}`
+    } catch (e) { results.step3_profile_exists = `THROW: ${e.message}` }
+  } else {
+    results.step3_profile_exists = 'SKIPPED (step 2 failed)'
+  }
+
+  // Step 4: try manual profiles insert (if trigger didn't create it)
+  if (testUserId) {
+    try {
+      const { error } = await supabase.from('profiles').upsert({
+        id:        testUserId,
+        full_name: 'Debug Rider',
+        email:     testEmail,
+        role:      'rider',
+        is_active: true,
+      })
+      results.step4_manual_profile = error ? `FAIL: ${error.message}` : 'OK'
+    } catch (e) { results.step4_manual_profile = `THROW: ${e.message}` }
+  } else {
+    results.step4_manual_profile = 'SKIPPED (step 2 failed)'
+  }
+
+  // Step 5: try delivery_riders insert
+  if (testUserId) {
+    try {
+      const { error } = await supabase.from('delivery_riders').insert({
+        user_id:         testUserId,
+        full_name:       'Debug Rider',
+        email:           testEmail,
+        area:            'Test Area',
+        is_active:       true,
+        is_available:    true,
+        total_delivered: 0,
+        total_failed:    0,
+      })
+      results.step5_delivery_rider = error ? `FAIL: ${error.message}` : 'OK'
+    } catch (e) { results.step5_delivery_rider = `THROW: ${e.message}` }
+  } else {
+    results.step5_delivery_rider = 'SKIPPED (step 2 failed)'
+  }
+
+  // Cleanup: delete test user (cascades if FK set up)
+  if (testUserId) {
+    await supabase.auth.admin.deleteUser(testUserId)
+    await supabase.from('profiles').delete().eq('id', testUserId)
+    await supabase.from('delivery_riders').delete().eq('user_id', testUserId)
+    results.cleanup = 'done'
+  }
+
+  return res.json(results)
+})
 
 // ─── Group Reservations ──────────────────────────────────────
 router.get('/group-reservations',      guard, adminGetReservations)

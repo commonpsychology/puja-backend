@@ -393,7 +393,7 @@ router.get('/debug-supabase', guard, async (req, res) => {
   res.json(results)
 })
 // ─── TEMP DEBUG: remove after fixing ─────────────────────────
-router.post('/debug-create-rider', guard, async (req, res) => {
+router.post('/debug-create-rider', async (req, res) => {
   const results = {}
 
   // Step 1: can we call auth.admin at all?

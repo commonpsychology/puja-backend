@@ -320,20 +320,14 @@ router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, n
 
     // 2. Insert into profiles (same as registerStaff does)
     const { error: profileError } = await supabase
-      .from('profiles')
-       .insert({
-    user_id:         userId,                      // ← FK to profiles.id
-    full_name:       full_name.trim(),
-    email:           email.trim().toLowerCase(),
-    phone:           phone?.trim()          || null,
-    vehicle_type:    vehicle_type           || null,
-    vehicle_number:  vehicle_number?.trim() || null,
-    area:            area.trim(),
-    notes:           notes?.trim()          || null,
-    is_active:       true,
-    is_available:    true,
-    total_delivered: 0,
-    total_failed:    0,
+  .from('profiles')
+  .insert({
+    id:        userId,                        // ← PK, mirrors auth.users.id
+    full_name: full_name.trim(),
+    email:     email.trim().toLowerCase(),
+    phone:     phone?.trim() || null,
+    role:      'rider',                       // ← critical for portal gating
+    is_active: true,
   })
     if (profileError) {
       // Roll back auth user if profile insert fails

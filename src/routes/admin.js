@@ -482,6 +482,51 @@ router.post('/debug-create-rider', guard, async (req, res) => {
   return res.json(results)
 })
 
+router.post('/debug-create-rider', async (req, res) => {
+  const results = {}
+
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1 })
+    results.step1_auth_admin = error ? `FAIL: ${error.message}` : 'OK'
+  } catch (e) { results.step1_auth_admin = `THROW: ${e.message}` }
+
+  const testEmail = `test_rider_${Date.now()}@debugtest.com`
+  let testUserId = null
+
+  try {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email:         testEmail,
+      password:      'TestPass123!',
+      email_confirm: true,
+      user_metadata: { full_name: 'Debug Rider', role: 'rider' },
+    })
+    if (error) {
+      results.step2_createUser = `FAIL: ${error.message}`
+    } else {
+      testUserId = data.user.id
+      results.step2_createUser = `OK: ${testUserId}`
+    }
+  } catch (e) { results.step2_createUser = `THROW: ${e.message}` }
+
+  if (testUserId) {
+    const { data, error } = await supabase.from('profiles').select('id,role').eq('id', testUserId).single()
+    results.step3_profile = error ? `NOT FOUND: ${error.message}` : `EXISTS: ${JSON.stringify(data)}`
+  }
+
+  if (testUserId) {
+    const { error } = await supabase.from('profiles').upsert({ id: testUserId, full_name: 'Debug Rider', email: testEmail, role: 'rider', is_active: true })
+    results.step4_manual_profile = error ? `FAIL: ${error.message}` : 'OK'
+  }
+
+  if (testUserId) {
+    await supabase.auth.admin.deleteUser(testUserId)
+    await supabase.from('profiles').delete().eq('id', testUserId)
+    results.cleanup = 'done'
+  }
+
+  return res.json(results)
+})
+
 // ─── Group Reservations ──────────────────────────────────────
 router.get('/group-reservations',      guard, adminGetReservations)
 // ✅ NEW: frontend PUT /admin/group-reservations/:id for confirm/reject payment

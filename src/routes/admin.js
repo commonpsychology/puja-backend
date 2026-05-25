@@ -292,79 +292,221 @@ router.get('/delivery-riders', guard, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-router.post('/delivery-riders', [authenticate, requireAdmin], async (req, res, next) => {
-  console.log('SUPABASE_URL set:', !!process.env.SUPABASE_URL)
-  console.log('SERVICE_KEY set:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-  console.log('SERVICE_KEY starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 20))
-
-  if (req.user.role !== 'admin') {
+router.get('/delivery-riders', guard, async (req, res, next) => {
+  try {
+    const limit    = Math.min(500, parseInt(req.query.limit) || 200)
+    const onlyActive = req.query.is_active !== 'false'   // default: active only
+ 
+    // Join delivery_riders → profiles to get name/email/phone in one query
+    let q = supabase
+      .from('delivery_riders')
+      .select(`
+        id,
+        user_id,
+        area,
+        vehicle_type,
+        vehicle_number,
+        is_active,
+        is_available,
+        is_verified,
+        total_delivered,
+        total_failed,
+        notes,
+        created_at,
+        profiles!inner ( full_name, email, phone )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+ 
+    if (onlyActive) q = q.eq('is_active', true)
+ 
+    const { data, error } = await q
+    if (error) throw error
+ 
+    // Flatten profiles join for easy consumption
+    const riders = (data || []).map(r => ({
+      id:              r.id,
+      user_id:         r.user_id,
+      full_name:       r.profiles.full_name,
+      email:           r.profiles.email,
+      phone:           r.profiles.phone,
+      area:            r.area,
+      vehicle_type:    r.vehicle_type,
+      vehicle_number:  r.vehicle_number,
+      is_active:       r.is_active,
+      is_available:    r.is_available,
+      is_verified:     r.is_verified,
+      total_delivered: r.total_delivered,
+      total_failed:    r.total_failed,
+      notes:           r.notes,
+      created_at:      r.created_at,
+    }))
+ 
+    res.json({ riders, total: riders.length })
+  } catch (err) { next(err) }
+})
+ 
+// ─── Delivery Riders — POST (register new rider) ─────────────
+//
+// FIX vs old version:
+//   OLD: supabase.auth.admin.createUser() → password stored in Supabase Auth only
+//        → profiles.password_hash = 'oauth'
+//        → delivery login uses signInWithPassword with service role client (BROKEN)
+//
+//   NEW: bcrypt hash stored in profiles.password_hash (same as all other staff)
+//        AND user registered in Supabase Auth so signInWithPassword also works
+//        → delivery login works via supabaseAnon.signInWithPassword (FIXED)
+//
+router.post('/delivery-riders', guard, async (req, res, next) => {
+  if (req.user.role !== 'admin')
     return res.status(403).json({ message: 'Only admins can register delivery riders.' })
-  }
-
+ 
   try {
     const {
       full_name, email, phone, password,
       vehicle_type, vehicle_number, area, notes,
     } = req.body
-
+ 
+    // ── Validate ──────────────────────────────────────────────
     if (!full_name?.trim()) return res.status(400).json({ message: 'Full name is required.' })
     if (!email?.trim())     return res.status(400).json({ message: 'Email is required.' })
     if (!password)          return res.status(400).json({ message: 'Password is required.' })
     if (!area?.trim())      return res.status(400).json({ message: 'Delivery area is required.' })
-
-    // 1. Create auth user — DB trigger auto-creates the profiles row
-    //    using user_metadata.full_name and user_metadata.role
-    const { data: authData, error: authError } =
-      await supabase.auth.admin.createUser({
-        email:         email.trim().toLowerCase(),
-        password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: full_name.trim(),
-          role:      'rider',   // ← trigger reads this and sets role in profiles
-        },
-      })
-    if (authError) return res.status(400).json({ message: authError.message })
-
+    if (password.length < 8)
+      return res.status(400).json({ message: 'Password must be at least 8 characters.' })
+    if (!/[A-Z]/.test(password))
+      return res.status(400).json({ message: 'Password needs at least one uppercase letter.' })
+    if (!/[0-9]/.test(password))
+      return res.status(400).json({ message: 'Password needs at least one number.' })
+ 
+    const normalizedEmail = email.trim().toLowerCase()
+ 
+    // ── Duplicate check ───────────────────────────────────────
+    const { data: existing } = await supabase
+      .from('profiles').select('id').eq('email', normalizedEmail).maybeSingle()
+    if (existing)
+      return res.status(409).json({ message: 'A user with this email already exists.' })
+ 
+    // ── 1. Register in Supabase Auth ──────────────────────────
+    // This is required so supabaseAnon.signInWithPassword works on login.
+    // We set the actual password here (not relying on a trigger).
+    const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+      email:         normalizedEmail,
+      password,                           // stored in auth.users — enables signInWithPassword
+      email_confirm: true,
+      user_metadata: { full_name: full_name.trim(), role: 'rider' },
+    })
+ 
+    if (authErr) {
+      console.error('[admin/delivery-riders POST] Supabase Auth error:', authErr.message)
+      return res.status(400).json({ message: authErr.message })
+    }
+ 
     const userId = authData.user.id
-
-    // ✅ NO manual profiles.insert() — the DB trigger already created the row
-
-    // 2. Insert into delivery_riders
-    // 2. Insert into delivery_riders (profiles row created by DB trigger)
-const { data: riderRow, error: riderError } = await supabase
-  .from('delivery_riders')
-  .insert({
-    user_id:         userId,
-    vehicle_type:    vehicle_type           || null,
-    vehicle_number:  vehicle_number?.trim() || null,
-    area:            area.trim(),
-    notes:           notes?.trim()          || null,
-    is_active:       true,
-    is_available:    true,
-    is_verified:     false,
-    total_delivered: 0,
-    total_failed:    0,
-  })
-  .select()
-  .single()
-
-if (riderError) {
-  await supabase.auth.admin.deleteUser(userId)
-  return res.status(500).json({ message: riderError.message })
-}
-
-return res.status(201).json({
-  message: 'Delivery rider registered successfully.',
-  rider: {
-    id:           riderRow.id,
-    user_id:      userId,
-    full_name:    full_name.trim(),
-    email:        email.trim().toLowerCase(),
-    area:         area.trim(),
-    vehicle_type: vehicle_type || null,
-  },
-})} catch (err) { next(err) }
+ 
+    // ── 2. Insert into profiles ───────────────────────────────
+    // Use the SAME id as auth.users (UUID) so queries by user_id always match.
+    // Store a real bcrypt hash alongside — this is what the custom JWT
+    // login system reads when NOT going through Supabase Auth.
+    const bcrypt = require('bcryptjs')
+    const password_hash = await bcrypt.hash(password, 12)
+ 
+    const { data: newUser, error: profileErr } = await supabase
+      .from('profiles')
+      .insert({
+        id:                userId,           // MUST match auth.users.id
+        full_name:         full_name.trim(),
+        email:             normalizedEmail,
+        phone:             phone?.trim()   || null,
+        password_hash,                       // real bcrypt hash — NOT 'oauth'
+        role:              'rider',
+        is_active:         true,
+        is_email_verified: true,
+        created_by:        req.user.id,
+        notes:             notes?.trim()   || null,
+      })
+      .select('id, full_name, email, role, created_at')
+      .single()
+ 
+    if (profileErr) {
+      // Roll back auth user
+      await supabase.auth.admin.deleteUser(userId).catch(() => {})
+      console.error('[admin/delivery-riders POST] profiles insert:', profileErr.message)
+      if (profileErr.code === '23505')
+        return res.status(409).json({ message: 'A user with this email already exists.' })
+      return res.status(500).json({ message: profileErr.message })
+    }
+ 
+    // ── 3. Insert into delivery_riders ────────────────────────
+    const { data: riderRow, error: riderErr } = await supabase
+      .from('delivery_riders')
+      .insert({
+        user_id:         userId,
+        vehicle_type:    vehicle_type           || null,
+        vehicle_number:  vehicle_number?.trim() || null,
+        area:            area.trim(),
+        notes:           notes?.trim()          || null,
+        is_active:       true,
+        is_available:    true,
+        is_verified:     false,
+        total_delivered: 0,
+        total_failed:    0,
+      })
+      .select()
+      .single()
+ 
+    if (riderErr) {
+      // Roll back both auth user and profile
+      await supabase.auth.admin.deleteUser(userId).catch(() => {})
+      await supabase.from('profiles').delete().eq('id', userId).catch(() => {})
+      console.error('[admin/delivery-riders POST] delivery_riders insert:', riderErr.message)
+      return res.status(500).json({ message: riderErr.message })
+    }
+ 
+    // ── 4. Audit log (non-blocking) ───────────────────────────
+    supabase.from('audit_logs').insert({
+      actor_id:  req.user.id,
+      action:    'register_rider',
+      target_id: userId,
+      details:   { area: area.trim(), vehicle_type: vehicle_type || null },
+    }).then(() => {})
+ 
+    return res.status(201).json({
+      message: 'Delivery rider registered successfully.',
+      rider: {
+        id:           riderRow.id,
+        user_id:      userId,
+        full_name:    full_name.trim(),
+        email:        normalizedEmail,
+        area:         area.trim(),
+        vehicle_type: vehicle_type || null,
+      },
+    })
+ 
+  } catch (err) { next(err) }
+})
+ 
+// ─── Delivery Riders — PUT (toggle active / update) ──────────
+router.put('/delivery-riders/:id', guard, async (req, res, next) => {
+  try {
+    const allowed = ['is_active','is_available','is_verified','area','vehicle_type','vehicle_number','notes']
+    const updates = {}
+    for (const k of allowed) {
+      if (req.body[k] !== undefined) updates[k] = req.body[k]
+    }
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ message: 'No valid fields to update.' })
+ 
+    const { data, error } = await supabase
+      .from('delivery_riders')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+ 
+    if (error) throw error
+    res.json({ success: true, rider: data })
+  } catch (err) { next(err) }
 })
 
 router.get('/debug-supabase', guard, async (req, res) => {

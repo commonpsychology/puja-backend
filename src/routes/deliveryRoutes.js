@@ -260,17 +260,17 @@ router.get('/my-orders', async (req, res) => {
     if (dsFilter && !VALID_DS.includes(dsFilter))
       return res.status(400).json({ message: 'Invalid delivery_status filter.' })
 
-    let q = supabase
-      .from('orders')
-      .select(`
-        id, order_number, status, total_amount, payment_status,
-        delivery_status, delivery_address, delivery_note,
-        picked_up_at, delivered_at, failed_at, created_at, updated_at,
-        profiles!client_id ( full_name )
-      `, { count: 'exact' })
-      .eq('delivery_rider_id', rider.id)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+   let q = supabase
+  .from('orders')
+  .select(`
+    id, order_number, status, total_amount,
+    delivery_status, delivery_address, delivery_note,
+    picked_up_at, delivered_at, failed_at, created_at, updated_at,
+    profiles!orders_client_id_fkey ( full_name )
+  `, { count: 'exact' })
+  .eq('delivery_rider_id', rider.id)
+  .order('created_at', { ascending: false })
+  .range(offset, offset + limit - 1)
 
     if (dsFilter) q = q.eq('delivery_status', dsFilter)
 

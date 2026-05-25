@@ -1,8 +1,6 @@
-// routes/delivery.js — COMPLETE FIXED FILE
-// ─────────────────────────────────────────────────────────────
-// Fix: check-credentials now uses ANON KEY client for signInWithPassword
-// Everything else unchanged from your working document 12.
-// ─────────────────────────────────────────────────────────────
+// routes/delivery.js — COMPLETE FINAL FILE
+// Uses supabaseAnon (anon key) for signInWithPassword,
+// supabase (service role) for all DB queries.
 
 const express    = require('express')
 const jwt        = require('jsonwebtoken')
@@ -11,19 +9,16 @@ const { createClient } = require('@supabase/supabase-js')
 
 const router = express.Router()
 
-// ── TWO Supabase clients — this is the entire fix ─────────────
-// SERVICE ROLE → all DB queries (bypasses RLS, never for auth sign-in)
+// ── Two Supabase clients — REQUIRED ──────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY   // DB queries only
 )
-// ANON KEY → auth.signInWithPassword only (this is what was missing)
 const supabaseAnon = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_ANON_KEY           // auth.signInWithPassword only
 )
 
-// ── Email transport ───────────────────────────────────────────
 const mailer = nodemailer.createTransport({
   host:   process.env.SMTP_HOST,
   port:   Number(process.env.SMTP_PORT) || 587,
@@ -35,7 +30,6 @@ function signToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '12h' })
 }
 
-// ── Auth guard for protected routes ──────────────────────────
 async function getRider(req) {
   const header = req.headers['authorization'] || ''
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null
@@ -71,10 +65,7 @@ router.post('/check-credentials', async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase()
 
-    // ── Step 1: verify password via Supabase Auth ─────────────
-    // MUST use supabaseAnon (anon key), NOT supabase (service role).
-    // service role cannot call signInWithPassword — it has no concept
-    // of sessions. This was the root cause of "Profile not found".
+    // Use ANON KEY client — service role cannot do signInWithPassword
     const { data: authData, error: authError } =
       await supabaseAnon.auth.signInWithPassword({
         email:    normalizedEmail,
@@ -82,18 +73,14 @@ router.post('/check-credentials', async (req, res) => {
       })
 
     if (authError || !authData?.user) {
-      console.error('[delivery/check-credentials] Supabase Auth error:', authError?.message)
+      console.error('[delivery/check-credentials] auth error:', authError?.message)
       return res.status(401).json({ message: 'Invalid email or password.' })
     }
 
     const userId = authData.user.id
+    await supabaseAnon.auth.signOut().catch(() => {}) // don't keep a session
 
-    // Sign out the Supabase session immediately — we only needed
-    // credential verification. Our actual auth uses a custom JWT.
-    await supabaseAnon.auth.signOut().catch(() => {})
-
-    // ── Step 2: fetch profiles row ────────────────────────────
-    // Use service role client — guaranteed to work regardless of RLS.
+    // Use SERVICE ROLE for DB reads — bypasses RLS always
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id, full_name, email, phone, role, is_active')
@@ -101,17 +88,14 @@ router.post('/check-credentials', async (req, res) => {
       .single()
 
     if (profileError || !profile) {
-      console.error('[delivery/check-credentials] profile not found for userId:', userId, profileError?.message)
+      console.error('[delivery/check-credentials] profile not found, userId:', userId)
       return res.status(404).json({ message: 'Profile not found. Contact admin.' })
     }
-
     if (!profile.is_active)
       return res.status(403).json({ message: 'Account is inactive. Contact admin.' })
-
     if (profile.role !== 'rider')
       return res.status(403).json({ message: 'This portal is for delivery riders only.' })
 
-    // ── Step 3: fetch delivery_riders row ─────────────────────
     const { data: riderRow, error: riderError } = await supabase
       .from('delivery_riders')
       .select('id, is_active, is_available, area, vehicle_type, vehicle_number')
@@ -119,17 +103,15 @@ router.post('/check-credentials', async (req, res) => {
       .single()
 
     if (riderError || !riderRow) {
-      console.error('[delivery/check-credentials] delivery_riders row not found:', riderError?.message)
+      console.error('[delivery/check-credentials] rider row not found:', riderError?.message)
       return res.status(403).json({ message: 'Rider profile not set up. Contact admin.' })
     }
-
     if (!riderRow.is_active)
       return res.status(403).json({ message: 'Rider account is inactive. Contact admin.' })
 
-    // ── Step 4: return info for OTP modal ─────────────────────
     return res.status(200).json({
       user: {
-        id:           profile.id,    // ← passed as user_id to send-otp and verify-otp
+        id:           profile.id,
         full_name:    profile.full_name,
         email:        profile.email,
         phone:        profile.phone,
@@ -140,7 +122,7 @@ router.post('/check-credentials', async (req, res) => {
     })
 
   } catch (err) {
-    console.error('[delivery/check-credentials] unexpected error:', err)
+    console.error('[delivery/check-credentials]', err)
     return res.status(500).json({ message: 'Internal server error.' })
   }
 })
@@ -169,14 +151,10 @@ router.post('/send-otp', async (req, res) => {
 
     await supabase.from('otp_codes').delete().eq('user_id', user_id)
     const { error: insertErr } = await supabase.from('otp_codes').insert({
-      user_id,
-      code,
-      expires_at: expires,
-      used:       false,
+      user_id, code, expires_at: expires, used: false,
     })
-
     if (insertErr) {
-      console.error('[delivery/send-otp] insert error:', insertErr)
+      console.error('[delivery/send-otp]', insertErr)
       return res.status(500).json({ message: 'Failed to generate OTP.' })
     }
 
@@ -184,23 +162,21 @@ router.post('/send-otp', async (req, res) => {
       from:    `"Common Psychology" <${process.env.SMTP_USER}>`,
       to:      profile.email,
       subject: 'Your Delivery Portal Login Code',
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:2rem">
-          <h2 style="color:#007BA8;margin-bottom:.5rem">🚴 Delivery Portal Login</h2>
-          <p>Hi <strong>${profile.full_name}</strong>,</p>
-          <p>Your one-time login code is:</p>
-          <div style="font-size:2.5rem;font-weight:800;letter-spacing:.25em;color:#1a3a4a;
-                      background:#E0F7FF;border-radius:12px;padding:1rem 1.5rem;
-                      text-align:center;margin:1.25rem 0">${code}</div>
-          <p style="color:#7a9aaa;font-size:.85rem">
-            Expires in <strong>10 minutes</strong>.<br>
-            If you didn't request this, contact your supervisor.
-          </p>
-        </div>`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:2rem">
+        <h2 style="color:#007BA8">🚴 Delivery Portal Login</h2>
+        <p>Hi <strong>${profile.full_name}</strong>,</p>
+        <p>Your one-time login code is:</p>
+        <div style="font-size:2.5rem;font-weight:800;letter-spacing:.25em;color:#1a3a4a;
+                    background:#E0F7FF;border-radius:12px;padding:1rem 1.5rem;
+                    text-align:center;margin:1.25rem 0">${code}</div>
+        <p style="color:#7a9aaa;font-size:.85rem">
+          Expires in <strong>10 minutes</strong>.<br>
+          If you didn't request this, contact your supervisor.
+        </p>
+      </div>`,
     })
 
     return res.status(200).json({ message: `Code sent to ${profile.email}` })
-
   } catch (err) {
     console.error('[delivery/send-otp]', err)
     return res.status(500).json({ message: 'Failed to send OTP. Try again.' })
@@ -263,7 +239,6 @@ router.post('/verify-otp', async (req, res) => {
         total_failed:    rider.total_failed,
       },
     })
-
   } catch (err) {
     console.error('[delivery/verify-otp]', err)
     return res.status(500).json({ message: 'Internal server error.' })
@@ -306,17 +281,13 @@ router.get('/my-orders', async (req, res) => {
     }
 
     const items = (rows || []).map(o => ({
-      ...o,
-      client_name: o.profiles?.full_name || null,
-      profiles:    undefined,
+      ...o, client_name: o.profiles?.full_name || null, profiles: undefined,
     }))
 
     const { data: all } = await supabase
-      .from('orders')
-      .select('delivery_status')
-      .eq('delivery_rider_id', rider.id)
+      .from('orders').select('delivery_status').eq('delivery_rider_id', rider.id)
 
-    const summary = { total: 0, assigned: 0, picked_up: 0, in_transit: 0, delivered: 0, failed: 0, returned: 0 }
+    const summary = { total:0, assigned:0, picked_up:0, in_transit:0, delivered:0, failed:0, returned:0 }
     ;(all || []).forEach(r => {
       summary.total++
       if (summary[r.delivery_status] !== undefined) summary[r.delivery_status]++
@@ -324,10 +295,9 @@ router.get('/my-orders', async (req, res) => {
 
     return res.status(200).json({
       items,
-      pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) },
+      pagination: { page, limit, total: count||0, totalPages: Math.ceil((count||0)/limit) },
       summary,
     })
-
   } catch (err) {
     if (err.status) return res.status(err.status).json({ message: err.message })
     console.error('[delivery/my-orders GET]', err)
@@ -349,13 +319,9 @@ router.put('/my-orders/:id', async (req, res) => {
       return res.status(400).json({ message: `delivery_status must be one of: ${RIDER_STATUSES.join(', ')}` })
 
     const { data: order, error: fetchErr } = await supabase
-      .from('orders')
-      .select('id, delivery_status, delivery_rider_id, order_number')
-      .eq('id', req.params.id)
-      .single()
+      .from('orders').select('id, delivery_status, delivery_rider_id').eq('id', req.params.id).single()
 
-    if (fetchErr || !order)
-      return res.status(404).json({ message: 'Order not found.' })
+    if (fetchErr || !order) return res.status(404).json({ message: 'Order not found.' })
     if (order.delivery_rider_id !== rider.id)
       return res.status(403).json({ message: 'This order is not assigned to you.' })
     if (['delivered','returned'].includes(order.delivery_status))
@@ -368,45 +334,25 @@ router.put('/my-orders/:id', async (req, res) => {
     if (delivery_status === 'failed')    patch.failed_at    = now
 
     const { data: updated, error: upErr } = await supabase
-      .from('orders')
-      .update(patch)
-      .eq('id', req.params.id)
-      .select('id, order_number, delivery_status, delivery_note, delivered_at, updated_at')
-      .single()
+      .from('orders').update(patch).eq('id', req.params.id)
+      .select('id, order_number, delivery_status, delivery_note, delivered_at, updated_at').single()
 
-    if (upErr) {
-      console.error('[delivery/my-orders PUT]', upErr)
-      return res.status(500).json({ message: 'Failed to update order.' })
-    }
+    if (upErr) return res.status(500).json({ message: 'Failed to update order.' })
 
     supabase.from('delivery_status_history').insert({
-      order_id:   req.params.id,
-      rider_id:   rider.id,
-      old_status: order.delivery_status,
-      new_status: delivery_status,
-      note:       resolvedNote,
-      changed_by: rider.user_id,
-    }).then(({ error }) => {
-      if (error) console.warn('[delivery] history log failed:', error.message)
-    })
+      order_id: req.params.id, rider_id: rider.id,
+      old_status: order.delivery_status, new_status: delivery_status,
+      note: resolvedNote, changed_by: rider.user_id,
+    }).then(() => {})
 
     if (delivery_status === 'delivered')
-      supabase.from('delivery_riders')
-        .update({ total_delivered: rider.total_delivered + 1 })
-        .eq('id', rider.id).then(() => {})
+      supabase.from('delivery_riders').update({ total_delivered: rider.total_delivered+1 }).eq('id', rider.id).then(() => {})
     if (delivery_status === 'failed')
-      supabase.from('delivery_riders')
-        .update({ total_failed: rider.total_failed + 1 })
-        .eq('id', rider.id).then(() => {})
+      supabase.from('delivery_riders').update({ total_failed: rider.total_failed+1 }).eq('id', rider.id).then(() => {})
 
-    return res.status(200).json({
-      message: `Delivery status updated to ${delivery_status}.`,
-      order:   updated,
-    })
-
+    return res.status(200).json({ message: `Status updated to ${delivery_status}.`, order: updated })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ message: err.message })
-    console.error('[delivery/my-orders PUT]', err)
     return res.status(500).json({ message: 'Internal server error.' })
   }
 })
@@ -418,16 +364,11 @@ router.get('/me', async (req, res) => {
   try {
     const rider = await getRider(req)
     return res.status(200).json({
-      id:              rider.id,
-      name:            rider.profiles.full_name,
-      email:           rider.profiles.email,
-      phone:           rider.profiles.phone,
-      area:            rider.area,
-      vehicle_type:    rider.vehicle_type,
-      vehicle_number:  rider.vehicle_number,
-      is_available:    rider.is_available,
-      total_delivered: rider.total_delivered,
-      total_failed:    rider.total_failed,
+      id: rider.id, name: rider.profiles.full_name,
+      email: rider.profiles.email, phone: rider.profiles.phone,
+      area: rider.area, vehicle_type: rider.vehicle_type,
+      vehicle_number: rider.vehicle_number, is_available: rider.is_available,
+      total_delivered: rider.total_delivered, total_failed: rider.total_failed,
     })
   } catch (err) {
     if (err.status) return res.status(err.status).json({ message: err.message })

@@ -329,9 +329,24 @@ router.put('/my-orders/:id', async (req, res) => {
 
     const now   = new Date().toISOString()
     const patch = { delivery_status, delivery_note: resolvedNote, updated_at: now }
-    if (delivery_status === 'picked_up' && !order.picked_up_at) patch.picked_up_at = now
-    if (delivery_status === 'delivered') patch.delivered_at = now
-    if (delivery_status === 'failed')    patch.failed_at    = now
+    if (delivery_status === 'picked_up' && !order.picked_up_at) {
+      patch.picked_up_at = now
+      patch.status = 'processing'
+    }
+    if (delivery_status === 'in_transit') {
+      patch.status = 'shipped'
+    }
+    if (delivery_status === 'delivered') {
+      patch.delivered_at = now
+      patch.status = 'delivered'
+    }
+    if (delivery_status === 'failed') {
+      patch.failed_at = now
+      patch.status = 'processing'   // stays in processing so admin can review
+    }
+    if (delivery_status === 'returned') {
+      patch.status = 'cancelled'
+    }
 
     const { data: updated, error: upErr } = await supabase
       .from('orders').update(patch).eq('id', req.params.id)

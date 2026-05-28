@@ -282,7 +282,7 @@ async function setAppointmentStatus(req, res, next) {
 // ─────────────────────────────────────────────────────────────
 async function getAllOrders(req, res, next) {
   try {
-    const { status, page = 1, limit = 20 } = req.query
+    const { status, delivery_status, page = 1, limit = 20 } = req.query
     const offset = (Number(page) - 1) * Number(limit)
 
     let query = supabase
@@ -290,17 +290,34 @@ async function getAllOrders(req, res, next) {
       .select(`
         id, order_number, status, subtotal, total_amount,
         discount_amount, tax_amount, coupon_code, notes, created_at,
-        clients:profiles!orders_client_id_fkey ( id, full_name, email )
+        delivery_status, delivery_rider_id,
+        clients:profiles!orders_client_id_fkey ( id, full_name, email ),
+        delivery_riders (
+          id, area, vehicle_type,
+          profiles ( full_name )
+        )
       `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1)
 
-    if (status) query = query.eq('status', status)
+    if (status)          query = query.eq('status', status)
+    if (delivery_status) query = query.eq('delivery_status', delivery_status)
+
     const { data, count, error } = await query
     if (error) throw error
 
-    const orders = (data || []).map(o => ({ ...o, client_name: o.clients?.full_name || null }))
-    return res.status(200).json({ success: true, orders, pagination: { page: Number(page), limit: Number(limit), total: count } })
+    const orders = (data || []).map(o => ({
+      ...o,
+      client_name:         o.clients?.full_name || null,
+      delivery_rider_name: o.delivery_riders?.profiles?.full_name || null,
+      rider_area:          o.delivery_riders?.area || null,
+    }))
+
+    return res.status(200).json({
+      success: true,
+      orders,
+      pagination: { page: Number(page), limit: Number(limit), total: count },
+    })
   } catch (err) { next(err) }
 }
 

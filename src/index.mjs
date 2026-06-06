@@ -47,45 +47,44 @@ const enrollmentsRoutes   = require('./routes/enrollmentsRoute')
 const playlistsRoute      = require('./routes/playlistRoute')
 const attendanceRoutes    = require('./routes/attendanceRoutes')
 const dreamsRouter        = require('./routes/dreamsRoute')
-const galleryRoutes = require('./routes/gallery')
-
-const deliveryRoutes       = require('./routes/deliveryRoutes')
-const esewaRouter = require('./routes/esewa')
+const deliveryRoutes      = require('./routes/deliveryRoutes')
+const esewaRouter         = require('./routes/esewa')
 
 const app  = express()
 const PORT = process.env.PORT || 5000
 
-// ── Security & CORS ───────────────────────────────────────────────────────────
-// AFTER
+// ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:", "https:"],
-      connectSrc: ["'self'", "https://puja-backend-gamma.vercel.app"],
-      fontSrc: ["'self'", "https:", "data:"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-      // Allow your frontend to embed this backend in an iframe
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "blob:", "https:"],
+      connectSrc:  ["'self'", "https://puja-backend-gamma.vercel.app", "https://commonpsychology.vercel.app"],
+      fontSrc:     ["'self'", "https:", "data:"],
+      objectSrc:   ["'none'"],
+      mediaSrc:    ["'self'"],
+      frameSrc:    ["'none'"],
       frameAncestors: ["'self'", "https://commonpsychology.vercel.app"],
     },
   },
 }))
+
 app.set('trust proxy', 1)
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
-  'https://commonpsychology.vercel.app',   // ✅ no trailing slash
+  'http://localhost:3000',
+  'http://localhost:4173',
+  'https://commonpsychology.vercel.app',
 ].filter(Boolean)
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow server-to-server requests (no origin) and allowed origins
     if (!origin || allowedOrigins.includes(origin)) callback(null, true)
     else callback(new Error('Not allowed by CORS'))
   },
@@ -94,7 +93,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }))
 
-// ✅ Handle preflight requests for all routes
 app.options('*', cors())
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
@@ -102,9 +100,7 @@ app.use(express.json({ limit: '10kb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(cookieParser())
 
-// ── Static files ──────────────────────────────────────────────────────────────
-// NOTE: express.static does NOT work on Vercel (no persistent filesystem).
-// For local dev only. In production, serve images from Supabase Storage instead.
+// ── Static files (local dev only) ────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
   app.use('/images', express.static(path.join(__dirname, '..', 'images')))
 }
@@ -134,6 +130,7 @@ app.use('/api/therapist-portal',     therapistPortal)
 app.use('/api/appointments',         appointmentsRoutes)
 app.use('/api/payments',             paymentsRoutes)
 app.use('/api/esewa',                esewaRoutes)
+app.use('/api/esewa',                esewaRouter)
 app.use('/api/notifications',        notificationsRoutes)
 app.use('/api/contact',              contactRoutes)
 app.use('/api/reviews',              reviewsRoutes)
@@ -144,7 +141,6 @@ app.use('/api/settings',             settingsRoutes)
 app.use('/api/enrollments',          enrollmentsRoutes)
 app.use('/api/delivery',             deliveryRoutes)
 app.use('/api/courses',              coursesRoute)
-app.use('/api/esewa', esewaRouter)
 app.use('/api/images',               require('./routes/images'))
 app.use('/api/psych',                psychRoute)
 app.use('/api/otp',                  otpRoutes)
@@ -158,7 +154,6 @@ app.use('/api/resources',            resourcesRoutes)
 app.use('/api/gallery',              galleryRoutes)
 app.use('/api/community',            communityRoutes)
 app.use('/api/room-bookings',        roomBookingsRoutes)
-app.use('/api/gallery', galleryRoutes)
 app.use('/api/admin',                adminRoutes)
 app.use('/api/store',                storeRoutes)
 app.use('/api/wellness',             wellnessRoutes)
@@ -173,9 +168,6 @@ app.use((req, res) =>
 app.use(errorHandler)
 
 // ── Start server (local dev only) ─────────────────────────────────────────────
-// Vercel runs this file as a serverless function — it imports the app and
-// handles requests directly. Calling app.listen() in that environment hangs
-// the function. So we only listen when running locally.
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`\n🚀  Common Psychology API v2.1 — port ${PORT}`)

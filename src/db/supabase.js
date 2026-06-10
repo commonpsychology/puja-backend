@@ -11,7 +11,6 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment variables.'
   )
 }
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,

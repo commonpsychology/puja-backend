@@ -117,7 +117,8 @@ async function getDashboard(req, res, next) {
 // ─────────────────────────────────────────────────────────────
 async function registerStaff(req, res, next) {
   try {
-    const { full_name, email, phone, password, specialization, department, notes } = req.body
+    // FIX 1: destructure role from req.body (was missing — caused hardcoded 'therapist')
+    const { full_name, email, phone, password, role, specialization, department, notes } = req.body
 
     if (!full_name?.trim()) return res.status(400).json({ success: false, message: 'Full name is required.' })
     if (!email?.trim())     return res.status(400).json({ success: false, message: 'Email is required.' })
@@ -125,6 +126,10 @@ async function registerStaff(req, res, next) {
     if (password.length < 8)     return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' })
     if (!/[A-Z]/.test(password)) return res.status(400).json({ success: false, message: 'Password needs at least one uppercase letter.' })
     if (!/[0-9]/.test(password)) return res.status(400).json({ success: false, message: 'Password needs at least one number.' })
+
+    // FIX 2: validate role instead of assuming therapist
+    if (!['staff', 'therapist', 'admin'].includes(role))
+      return res.status(400).json({ success: false, message: 'Invalid role. Must be staff, therapist, or admin.' })
 
     const normalizedEmail = email.trim().toLowerCase()
     const { data: existing } = await supabase.from('profiles').select('id').eq('email', normalizedEmail).maybeSingle()
@@ -136,7 +141,8 @@ async function registerStaff(req, res, next) {
       .from('profiles')
       .insert({
         full_name: full_name.trim(), email: normalizedEmail,
-        phone: phone?.trim() || null, password_hash, role: 'therapist',
+        phone: phone?.trim() || null, password_hash,
+        role, // FIX 3: use role variable instead of hardcoded 'therapist'
         department: department?.trim() || null, notes: notes?.trim() || null,
         is_active: true, is_email_verified: true,
         created_by: req.user?.sub || req.user?.id || null,
@@ -149,30 +155,34 @@ async function registerStaff(req, res, next) {
       return res.status(500).json({ success: false, message: 'Database error. Please try again.' })
     }
 
-    const { data: therapistRow, error: therapistError } = await supabase
-      .from('therapists')
-      .insert({
-        user_id: newUser.id,
-        license_type: specialization?.trim() || 'Licensed Therapist',
-        specializations: specialization?.trim() ? [specialization.trim()] : [],
-        is_available: true, is_verified: true,
-        consultation_fee: 2000, session_duration: 60,
-        experience_years: 0, rating: 0, total_reviews: 0,
-        languages_spoken: ['Nepali', 'English'],
-      })
-      .select('id').single()
+    // FIX 4: only insert into therapists table when role is actually therapist
+    if (role === 'therapist') {
+      const { data: therapistRow, error: therapistError } = await supabase
+        .from('therapists')
+        .insert({
+          user_id: newUser.id,
+          license_type: specialization?.trim() || 'Licensed Therapist',
+          specializations: specialization?.trim() ? [specialization.trim()] : [],
+          is_available: true, is_verified: true,
+          consultation_fee: 2000, session_duration: 60,
+          experience_years: 0, rating: 0, total_reviews: 0,
+          languages_spoken: ['Nepali', 'English'],
+        })
+        .select('id').single()
 
-    if (therapistError) {
-      await supabase.from('profiles').delete().eq('id', newUser.id)
-      return res.status(500).json({ success: false, message: `Therapist record failed: ${therapistError.message}. Profile rolled back.` })
+      if (therapistError) {
+        await supabase.from('profiles').delete().eq('id', newUser.id)
+        return res.status(500).json({ success: false, message: `Therapist record failed: ${therapistError.message}. Profile rolled back.` })
+      }
     }
 
+    // FIX 5: audit log reflects actual role
     supabase.from('audit_logs').insert({
-      actor_id: req.user?.sub || req.user?.id, action: 'register_therapist',
-      target_id: newUser.id, details: { role: 'therapist', specialization: specialization?.trim() || null },
+      actor_id: req.user?.sub || req.user?.id, action: `register_${role}`,
+      target_id: newUser.id, details: { role, specialization: specialization?.trim() || null },
     })
 
-    return res.status(201).json({ success: true, message: 'Therapist registered successfully.', user: newUser })
+    return res.status(201).json({ success: true, message: `${role.charAt(0).toUpperCase() + role.slice(1)} registered successfully.`, user: newUser })
   } catch (err) { next(err) }
 }
 
@@ -853,26 +863,25 @@ async function getSocialWorkPrograms(req, res, next) {
   try {
     const { page = 1, limit = 50, search, q, include_inactive } = req.query
     const offset = (Number(page) - 1) * Number(limit)
- 
+
     let query = supabase
       .from('social_work_programs')
       .select('*', { count: 'exact' })
       .order('sort_order', { ascending: true })
       .range(offset, offset + Number(limit) - 1)
- 
-    // Admin can see inactive ones via ?include_inactive=true
+
     if (include_inactive !== 'true') query = query.eq('is_active', true)
- 
+
     if (search || q) {
       query = query.or(`title.ilike.%${search || q}%,region.ilike.%${search || q}%,type.ilike.%${search || q}%`)
     }
- 
+
     const { data, count, error } = await query
     if (error) throw error
     return res.status(200).json(paginated(data, count, page, limit))
   } catch (err) { next(err) }
 }
- 
+
 async function createSocialWorkProgram(req, res, next) {
   try {
     const {
@@ -881,9 +890,9 @@ async function createSocialWorkProgram(req, res, next) {
       tags, partners, outcomes, extra_content,
       sort_order, is_active,
     } = req.body
- 
+
     if (!title?.trim()) return res.status(400).json({ success: false, message: 'title is required' })
- 
+
     const payload = {
       title:        title.trim(),
       region:       region       || '',
@@ -902,7 +911,7 @@ async function createSocialWorkProgram(req, res, next) {
       sort_order:   sort_order != null ? Number(sort_order) : 0,
       is_active:    is_active !== false,
     }
- 
+
     const { data, error } = await supabase
       .from('social_work_programs')
       .insert(payload)
@@ -912,7 +921,7 @@ async function createSocialWorkProgram(req, res, next) {
     return res.status(201).json({ success: true, item: data })
   } catch (err) { next(err) }
 }
- 
+
 async function updateSocialWorkProgram(req, res, next) {
   try {
     const allowed = [
@@ -930,7 +939,7 @@ async function updateSocialWorkProgram(req, res, next) {
     }
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ success: false, message: 'No fields to update' })
- 
+
     const { data, error } = await supabase
       .from('social_work_programs')
       .update(updates)
@@ -942,10 +951,9 @@ async function updateSocialWorkProgram(req, res, next) {
     return res.status(200).json({ success: true, item: data })
   } catch (err) { next(err) }
 }
- 
+
 async function deleteSocialWorkProgram(req, res, next) {
   try {
-    // Soft delete — just deactivate
     const { data, error } = await supabase
       .from('social_work_programs')
       .update({ is_active: false })
@@ -956,10 +964,7 @@ async function deleteSocialWorkProgram(req, res, next) {
     return res.status(200).json({ success: true, message: 'Program deactivated.' })
   } catch (err) { next(err) }
 }
- 
-// ─────────────────────────────────────────────────────────────
-// PUBLIC route (no auth) — add to your public router
-// ─────────────────────────────────────────────────────────────
+
 async function getPublicSocialWorkPrograms(req, res, next) {
   try {
     const { data, error } = await supabase
@@ -1035,7 +1040,7 @@ async function adminGetCommunityGroups(req, res, next) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// COMMUNITY ADMIN — Sessions (uses v_group_sessions view)
+// COMMUNITY ADMIN — Sessions
 // ─────────────────────────────────────────────────────────────
 async function adminGetSessions(req, res, next) {
   try {
@@ -1084,7 +1089,7 @@ async function adminDeleteSession(req, res, next) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// COMMUNITY ADMIN — Reservations (uses v_community_reservations view)
+// COMMUNITY ADMIN — Reservations
 // ─────────────────────────────────────────────────────────────
 async function adminGetReservations(req, res, next) {
   try {
@@ -1135,9 +1140,10 @@ async function adminGetMemberships(req, res, next) {
     const offset = (Number(page) - 1) * Number(limit)
     let query = supabase
       .from('group_memberships')
-.select(`id, group_id, user_id, display_name, is_anonymous, email,
+      .select(`id, group_id, user_id, display_name, is_anonymous, email,
 payment_status, payment_method, payment_reference, payment_amount, payment_id,
-community_groups ( id, name, emoji, membership_fee )`, { count: 'exact' })      .order('created_at', { ascending: false })
+community_groups ( id, name, emoji, membership_fee )`, { count: 'exact' })
+      .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1)
     if (group_id) query = query.eq('group_id', group_id)
     const { data, count, error } = await query
@@ -1401,8 +1407,7 @@ module.exports = {
   // therapist portal
   getMyTherapistAppointments,
 
+  // social work
+  getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
   getPublicSocialWorkPrograms,
-
-  createSocialWorkProgram, getSocialWorkPrograms, updateSocialWorkProgram, deleteSocialWorkProgram,
-  getPublicSocialWorkPrograms, 
 }

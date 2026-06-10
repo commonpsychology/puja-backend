@@ -8,7 +8,11 @@
 
 const express  = require('express')
 const router   = express.Router()
-const { supabase } = require('../db/supabase')      // adjust path
+const { createClient } = require('@supabase/supabase-js')
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
 const verifyToken  = require('../middleware/auth')   // adjust path
 
 // ── GET /api/patients  — list all patients (newest first) ───

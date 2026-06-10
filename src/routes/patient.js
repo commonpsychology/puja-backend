@@ -5,7 +5,7 @@
 const express        = require('express')
 const router         = express.Router()
 const { createClient } = require('@supabase/supabase-js')
-const verifyToken    = require('../middleware/auth')
+const { authenticate: verifyToken } = require('../middleware/auth')
 
 const supabase = createClient(
   process.env.SUPABASE_URL,

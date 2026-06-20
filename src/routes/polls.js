@@ -3,10 +3,10 @@
 // Mount with: app.use('/api/polls', require('./routes/polls'))
 //
 // Requires:
-//   - your existing JWT auth middleware (requireAuth) that sets req.user = { id, ... }
+//   - your existing JWT auth middleware (authenticate) that sets req.user = { sub, email, role }
+//     (sub = the user's profile id — see authController.js login/getMe)
 //   - an optional-auth variant (optionalAuth) that sets req.user if a valid
-//     token is present, but does NOT 401 if it's missing (poll results/submit
-//     for guests should still work if you decide to allow that later)
+//     token is present, but does NOT 401 if it's missing
 //
 // Env vars expected:
 //   SUPABASE_URL
@@ -23,17 +23,21 @@ const supabase = createClient(
 
 const POLL_KEY = 'homepage_poll'
 
-// Adjust these two imports to match your actual auth middleware exports
-const { requireAuth, optionalAuth } = require('../middleware/auth')
+const { authenticate, optionalAuth } = require('../middleware/auth')
 
 // ── GET /api/polls/has-answered ───────────────────────────────
 // Logged-in only. Returns { answered: boolean }.
-router.get('/has-answered', requireAuth, async (req, res) => {
+router.get('/has-answered', authenticate, async (req, res) => {
   try {
+    const userId = req.user?.sub
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' })
+    }
+
     const { data, error } = await supabase
       .from('poll_responses')
       .select('id')
-      .eq('user_id', req.user.id)
+      .eq('user_id', userId)
       .eq('poll_key', POLL_KEY)
       .maybeSingle()
 
@@ -49,8 +53,13 @@ router.get('/has-answered', requireAuth, async (req, res) => {
 // ── POST /api/polls/submit ────────────────────────────────────
 // Logged-in only (poll is now gated behind login, per product decision).
 // Body: { answers: { q1: 0, q2: 2, q3: 1, q4: 3, q5: 0 } }
-router.post('/submit', requireAuth, async (req, res) => {
+router.post('/submit', authenticate, async (req, res) => {
   const { answers } = req.body
+  const userId = req.user?.sub
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized.' })
+  }
 
   if (!answers || typeof answers !== 'object' || Object.keys(answers).length === 0) {
     return res.status(400).json({ message: 'Missing answers' })
@@ -62,7 +71,7 @@ router.post('/submit', requireAuth, async (req, res) => {
     const { error: insertError } = await supabase
       .from('poll_responses')
       .insert({
-        user_id: req.user.id,
+        user_id: userId,
         poll_key: POLL_KEY,
         answers,
       })

@@ -32,35 +32,52 @@ function generateResetToken() {
   return crypto.randomBytes(32).toString('hex')
 }
 
-// ============================================================
-// 🟢 UPDATE PASSWORD (authenticated — user knows current password)
-// ============================================================
-const updatePassword = async (req, res) => {
-  const { current, next } = req.body
-  const userId = req.user.sub
+// Generic message used for both "email not found" and "password wrong" cases.
+// Keeping this identical for both failure modes stops the endpoint from being
+// usable to discover which emails are registered.
+const GENERIC_AUTH_FAIL = 'Email or current password is incorrect.'
 
-  if (!current || !next) {
-    return res.status(400).json({ success: false, message: 'Current and new password are required.' })
+// ============================================================
+// 🟢 UPDATE PASSWORD — PUBLIC, email + current password
+// No login required. User proves identity by supplying their
+// current password alongside their email.
+//
+// SECURITY NOTE: this endpoint is intentionally rate-limited at
+// the route level (see passwordRoutes.js) because, unlike the
+// JWT-protected version it replaces, anyone can attempt a
+// password guess against any email address. Do not remove the
+// rate limiter without adding an equivalent protection.
+// ============================================================
+const updatePasswordPublic = async (req, res) => {
+  const { email, current, next } = req.body
+
+  if (!email || !current || !next) {
+    return res.status(400).json({ success: false, message: 'Email, current password, and new password are required.' })
   }
   if (next.length < 8) {
     return res.status(400).json({ success: false, message: 'New password must be at least 8 characters.' })
   }
 
+  const normalizedEmail = email.toLowerCase().trim()
+
   try {
     const { data: userRow, error: fetchErr } = await supabase
       .from('profiles')
       .select('id, password_hash')
-      .eq('id', userId)
+      .eq('email', normalizedEmail)
       .maybeSingle()
 
     if (fetchErr) throw fetchErr
+
+    // Same generic response whether the email doesn't exist or the
+    // password is wrong — see GENERIC_AUTH_FAIL above.
     if (!userRow) {
-      return res.status(404).json({ success: false, message: 'User not found.' })
+      return res.status(401).json({ success: false, message: GENERIC_AUTH_FAIL })
     }
 
     const matches = await bcrypt.compare(current, userRow.password_hash)
     if (!matches) {
-      return res.status(401).json({ success: false, message: 'Current password is incorrect.' })
+      return res.status(401).json({ success: false, message: GENERIC_AUTH_FAIL })
     }
 
     const sameAsOld = await bcrypt.compare(next, userRow.password_hash)
@@ -73,7 +90,7 @@ const updatePassword = async (req, res) => {
     const { error: updateErr } = await supabase
       .from('profiles')
       .update({ password_hash: newHash })
-      .eq('id', userId)
+      .eq('id', userRow.id)
 
     if (updateErr) throw updateErr
 
@@ -253,7 +270,7 @@ const resetPasswordWithToken = async (req, res) => {
 }
 
 module.exports = {
-  updatePassword,
+  updatePasswordPublic,
   requestPasswordResetOtp,
   verifyPasswordResetOtp,
   resetPasswordWithToken,

@@ -1,8 +1,8 @@
 const express = require('express')
-const { authenticate } = require('../middleware/auth')
+const rateLimit = require('express-rate-limit')
 
 const {
-  updatePassword,
+  updatePasswordPublic,
   requestPasswordResetOtp,
   verifyPasswordResetOtp,
   resetPasswordWithToken,
@@ -10,12 +10,31 @@ const {
 
 const router = express.Router()
 
-// 🔓 Public — forgot-password flow (profiles is not logged in)
-router.post('/forgot/request-otp', requestPasswordResetOtp)
-router.post('/forgot/verify-otp', verifyPasswordResetOtp)
+// Limits guessing attempts against a single email/IP pair. Without this,
+// /update and /forgot/verify-otp are brute-forceable since neither requires
+// a login token anymore — an attacker can just try passwords/codes.
+const guessLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 8,                   // 8 attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many attempts. Please try again later.' },
+})
+
+const otpRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // 5 OTP requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+})
+
+// 🔓 Public — forgot-password flow (user is not logged in)
+router.post('/forgot/request-otp', otpRequestLimiter, requestPasswordResetOtp)
+router.post('/forgot/verify-otp', guessLimiter, verifyPasswordResetOtp)
 router.post('/forgot/reset', resetPasswordWithToken)
 
-// 🔐 Authenticated — change password while logged in
-router.patch('/update', authenticate, updatePassword)
+// 🔓 Public — update password via email + current password (no login required)
+router.patch('/update', guessLimiter, updatePasswordPublic)
 
 module.exports = router

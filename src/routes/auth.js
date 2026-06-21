@@ -7,7 +7,7 @@ const {
   login,
   refresh,
   logout,
-  logoutAll,
+  logoutAll, 
   verifyEmail,
   resendVerification,
   forgotPassword,

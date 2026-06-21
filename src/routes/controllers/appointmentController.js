@@ -20,7 +20,9 @@ const bookAppointment = async (req, res) => {
     })
   }
 
-  try {
+ try {
+    await expireStaleHolds() // release any abandoned unpaid holds before checking conflicts
+
     // 1. Therapist exists
     const { data: therapist } = await supabase
       .from('therapists')
@@ -124,6 +126,8 @@ const getBookedSlots = async (req, res) => {
   }
 
   try {
+    await expireStaleHolds() // release any abandoned unpaid holds before reporting availability
+
     const { data, error } = await supabase
       .from('appointments')
       .select('scheduled_at')
@@ -238,15 +242,41 @@ const getAppointment = async (req, res) => {
 
 
 const cancelAppointment = async (req, res) => {
-  const { data } = await supabase
-    .from('appointments')
-    .update({ status: 'cancelled' })
-    .eq('id', req.params.id)
-    .eq('client_id', req.user.sub)
-    .select()
-    .single()
+  try {
+    // Fetch first so we know whether this was a paid booking or an abandoned hold.
+    const { data: existing, error: fetchErr } = await supabase
+      .from('appointments')
+      .select('id, payment_status')
+      .eq('id', req.params.id)
+      .eq('client_id', req.user.sub)
+      .maybeSingle()
 
-  return res.json({ success: true, appointment: data })
+    if (fetchErr) throw fetchErr
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Appointment not found.' })
+    }
+
+    const updatePayload = { status: 'cancelled' }
+    // Only relabel payment_status if it was never paid — preserves the record
+    // for bookings that *were* paid and are being cancelled for other reasons.
+    if (existing.payment_status === 'unpaid') {
+      updatePayload.payment_status = 'cancelled_unpaid'
+    }
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .update(updatePayload)
+      .eq('id', req.params.id)
+      .eq('client_id', req.user.sub)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return res.json({ success: true, appointment: data })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
 }
 
 
@@ -266,6 +296,33 @@ const rescheduleAppointment = async (req, res) => {
 
 
 // ============================================================
+// 🟢 EXPIRE STALE UNPAID HOLDS
+// Cancels any appointment still 'unpaid' after HOLD_MINUTES,
+// freeing the slot. Called opportunistically from bookAppointment
+// and getBookedSlots; wire to a real cron job too if available.
+// ============================================================
+const HOLD_MINUTES = 30
+
+const expireStaleHolds = async () => {
+  const cutoff = new Date(Date.now() - HOLD_MINUTES * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .update({ status: 'cancelled', payment_status: 'cancelled_unpaid' })
+    .eq('status', 'pending')
+    .eq('payment_status', 'unpaid')
+    .lt('created_at', cutoff)
+    .select('id')
+
+  if (error) {
+    console.error('expireStaleHolds error:', error.message)
+    return []
+  }
+  return data || []
+}
+
+
+// ============================================================
 module.exports = {
   bookAppointment,
   listMyAppointments,
@@ -273,5 +330,6 @@ module.exports = {
   cancelAppointment,
   rescheduleAppointment,
   getBookedSlots,
-  getMySlots
+  getMySlots,
+  expireStaleHolds
 }

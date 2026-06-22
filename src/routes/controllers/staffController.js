@@ -9,10 +9,10 @@ const supabase = createClient(
 const listStaff = async (req, res) => {
   const { role } = req.query
 
-  let query = supabase
-    .from('staff_members')
-    .select('id, full_name, phone, role, department, notes, is_active, avatar_url')
-    .order('full_name')
+ let query = supabase
+  .from('staff_members')
+  .select('id, full_name, phone, role, department, notes, is_active') // ← remove avatar_url
+  .order('full_name')
 
   if (role) query = query.eq('role', role)
 

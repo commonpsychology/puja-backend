@@ -1320,6 +1320,151 @@ async function getMyTherapistAppointments(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// ─── GROUP SESSIONS ADMIN CRUD ───────────────────────────────────────────────
+
+const adminGetSessions = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, group_id } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+
+    let query = supabase
+      .from('group_sessions')
+      .select(`
+        id, title, facilitator, description,
+        scheduled_at, duration_minutes, mode,
+        max_spots, price, reserved_count,
+        spots_left, is_full, group_id,
+        created_at, updated_at,
+        community_groups ( id, name, emoji )
+      `, { count: 'exact' })
+      .order('scheduled_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+
+    if (group_id) query = query.eq('group_id', group_id)
+
+    const { data, error, count } = await query
+    if (error) throw error
+
+    res.json({
+      items: data || [],
+      pagination: {
+        total: count || 0,
+        page:  Number(page),
+        limit: Number(limit),
+      },
+    })
+  } catch (err) { next(err) }
+}
+
+const adminCreateSessionFull = async (req, res, next) => {
+  try {
+    const {
+      group_id, title, facilitator, description,
+      scheduled_at, duration_minutes, mode, max_spots, price,
+    } = req.body
+
+    if (!group_id)          return res.status(400).json({ message: 'group_id is required' })
+    if (!title?.trim())     return res.status(400).json({ message: 'title is required' })
+    if (!facilitator?.trim()) return res.status(400).json({ message: 'facilitator is required' })
+    if (!scheduled_at)      return res.status(400).json({ message: 'scheduled_at is required' })
+
+    const { data, error } = await supabase
+      .from('group_sessions')
+      .insert({
+        group_id,
+        title:            title.trim(),
+        facilitator:      facilitator.trim(),
+        description:      description || null,
+        scheduled_at:     new Date(scheduled_at).toISOString(),
+        duration_minutes: Number(duration_minutes) || 60,
+        mode:             mode || 'Online (Zoom)',
+        max_spots:        Number(max_spots) || 20,
+        price:            Number(price) || 0,
+        reserved_count:   0,
+      })
+      .select(`*, community_groups ( id, name, emoji )`)
+      .single()
+
+    if (error) throw error
+    res.status(201).json({ session: data })
+  } catch (err) { next(err) }
+}
+
+const adminUpdateSession = async (req, res, next) => {
+  try {
+    const { id } = req.params
+    const {
+      group_id, title, facilitator, description,
+      scheduled_at, duration_minutes, mode, max_spots, price,
+    } = req.body
+
+    const updates = { updated_at: new Date().toISOString() }
+    if (group_id         != null) updates.group_id         = group_id
+    if (title            != null) updates.title            = title.trim()
+    if (facilitator      != null) updates.facilitator      = facilitator.trim()
+    if (description      != null) updates.description      = description
+    if (scheduled_at     != null) updates.scheduled_at     = new Date(scheduled_at).toISOString()
+    if (duration_minutes != null) updates.duration_minutes = Number(duration_minutes)
+    if (mode             != null) updates.mode             = mode
+    if (max_spots        != null) updates.max_spots        = Number(max_spots)
+    if (price            != null) updates.price            = Number(price)
+
+    const { data, error } = await supabase
+      .from('group_sessions')
+      .update(updates)
+      .eq('id', id)
+      .select(`*, community_groups ( id, name, emoji )`)
+      .single()
+
+    if (error) throw error
+    if (!data)  return res.status(404).json({ message: 'Session not found' })
+    res.json({ session: data })
+  } catch (err) { next(err) }
+}
+
+const adminDeleteSession = async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('group_sessions')
+      .delete()
+      .eq('id', req.params.id)
+
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) { next(err) }
+}
+
+const adminGetReservations = async (req, res, next) => {
+  try {
+    const { session_id, limit = 100, page = 1 } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+
+    let query = supabase
+      .from('group_reservations')
+      .select(`
+        id, session_id, user_id, display_name, is_anonymous,
+        payment_method, payment_reference, payment_status,
+        payment_amount, payment_id, created_at,
+        group_sessions (
+          id, title, scheduled_at, mode, price,
+          community_groups ( id, name, emoji )
+        )
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+
+    if (session_id) query = query.eq('session_id', session_id)
+
+    const { data, error, count } = await query
+    if (error) throw error
+
+    res.json({
+      items: data || [],
+      pagination: { total: count || 0, page: Number(page), limit: Number(limit) },
+    })
+  } catch (err) { next(err) }
+}
+
 // ─────────────────────────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────────────────────────
@@ -1328,6 +1473,11 @@ module.exports = {
   getDashboard,
   registerStaff,
 
+   adminGetSessions,
+  adminCreateSessionFull,
+  adminUpdateSession,
+  adminDeleteSession,
+  adminGetReservations,
   // users
   getUsers, toggleUserActive, setUserStatus, setUserRole,
 

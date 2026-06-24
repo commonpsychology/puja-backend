@@ -317,6 +317,46 @@ router.post  ('/group-sessions',     guard, adminCreateSessionFull)
 router.put   ('/group-sessions/:id', guard, adminUpdateSession)
 router.delete('/group-sessions/:id', guard, adminDeleteSession)
 
+// ─── Group Session Reservations (admin view) ─────────────────
+router.get('/group-reservations',      guard, adminGetReservations)
+router.put('/group-reservations/:id',  guard, async (req, res, next) => {
+  try {
+    const allowed = ['payment_status', 'confirmed_at', 'status', 'payment_reference']
+    const updates = {}
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key]
+    }
+    if (!Object.keys(updates).length)
+      return res.status(400).json({ message: 'No valid fields to update.' })
+    const { data, error } = await supabase
+      .from('group_reservations')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+    if (error) throw error
+    res.json({ success: true, reservation: data })
+  } catch (err) { next(err) }
+})
+router.delete('/group-reservations/:id', guard, async (req, res, next) => {
+  try {
+    const { data: res_, error: fetchErr } = await supabase
+      .from('group_reservations')
+      .select('session_id')
+      .eq('id', req.params.id)
+      .single()
+    if (fetchErr) throw fetchErr
+    const { error } = await supabase
+      .from('group_reservations')
+      .delete()
+      .eq('id', req.params.id)
+    if (error) throw error
+    // decrement reserved_count
+    await supabase.rpc('decrement_session_reserved_count', { session_id: res_.session_id })
+    res.json({ success: true })
+  } catch (err) { next(err) }
+})
+
 router.get('/delivery-riders', guard, async (req, res, next) => {
   try {
     const limit      = Math.min(500, parseInt(req.query.limit) || 200)

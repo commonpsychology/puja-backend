@@ -18,10 +18,12 @@ router.delete('/groups/:id/leave',         authenticate, leaveGroup)
 router.get('/my-groups',                   authenticate, myGroups)
 
 // ── Sessions ──────────────────────────────────────────────────
-router.get('/sessions',                    optionalAuth, listSessions)
-router.get('/my-reservations',             authenticate, myReservations)
-router.post('/sessions/:id/reserve',       optionalAuth, reserveSession)
+router.get('/sessions',                           optionalAuth, listSessions)
+router.get('/my-reservations',                    authenticate, myReservations)
+router.post('/sessions/:id/reserve',              authenticate, reserveSession)
 router.delete('/sessions/:id/cancel-reservation', authenticate, cancelReservation)
+// direct reservation cancel by reservation id (used by CommunityPage)
+router.delete('/reservations/:reservationId',     authenticate, cancelReservation)
 
 // ── Posts ─────────────────────────────────────────────────────
 router.get('/posts',                       optionalAuth, listPosts)

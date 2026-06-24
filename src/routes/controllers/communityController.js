@@ -235,8 +235,8 @@ async function myReservations(req, res, next) {
         id, session_id, payment_status, payment_method,
         payment_reference, payment_amount, payment_id,
         confirmed_at, status, created_at,
-        group_sessions ( id, title, scheduled_at, mode, facilitator, price,
-          community_groups ( name, emoji, membership_fee ) )
+    group_sessions!group_sessions_group_id_fkey ( id, title, scheduled_at, mode, facilitator, price,
+          community_groups!group_sessions_group_id_fkey ( name, emoji, membership_fee ) )
       `)
       .eq('user_id', userId)
       .eq('status', 'active')

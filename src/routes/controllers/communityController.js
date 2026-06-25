@@ -562,19 +562,32 @@ async function adminDeletePost(req, res, next) {
     return res.json({ success: true })
   } catch (err) { next(err) }
 }
-
 async function adminListReservations(req, res, next) {
   try {
-    const { session_id } = req.query
+    const { page, limit, offset } = pg(req)
     let query = supabase
-      .from('v_community_reservations')
-      .select('*')
+      .from('group_reservations')
+      .select(`
+        *,
+        group_sessions (
+          id, title, facilitator, mode, scheduled_at, price, max_spots,
+          community_groups ( id, name, emoji )
+        )
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
 
-    if (session_id) query = query.eq('session_id', session_id)
-    const { data, error } = await query
+    if (req.query.session_id) query = query.eq('session_id', req.query.session_id)
+    if (req.query.status)     query = query.eq('payment_status', req.query.status)
+
+    const { data, count, error } = await query
     if (error) throw error
-    return res.json({ success: true, reservations: data || [], items: data || [] })
+    return res.json({
+      success: true,
+      items: data || [],
+      reservations: data || [],
+      pagination: { page, limit, total: count ?? 0 },
+    })
   } catch (err) { next(err) }
 }
 
@@ -665,7 +678,97 @@ async function adminDeleteMembership(req, res, next) {
     return res.json({ success: true })
   } catch (err) { next(err) }
 }
+// Add these two to communityController.js
 
+async function adminUpdateGroup(req, res, next) {
+  try {
+    const allowed = [
+      'name', 'description', 'emoji', 'color', 'tags',
+      'membership_fee', 'membership_period', 'is_active', 'sort_order',
+    ]
+    const updates = {}
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key]
+    }
+    const { data, error } = await supabase
+      .from('community_groups')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+    if (error) throw error
+    return res.json({ success: true, group: data })
+  } catch (err) { next(err) }
+}
+
+async function adminDeleteGroup(req, res, next) {
+  try {
+    const { error } = await supabase
+      .from('community_groups')
+      .update({ is_active: false })   // soft delete
+      .eq('id', req.params.id)
+    if (error) throw error
+    return res.json({ success: true })
+  } catch (err) { next(err) }
+}
+
+async function adminUpdateSession(req, res, next) {
+  try {
+    const allowed = [
+      'title', 'facilitator', 'mode', 'scheduled_at',
+      'duration_minutes', 'max_spots', 'price', 'description',
+      'group_id', 'is_active',
+    ]
+    const updates = {}
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key]
+    }
+    const { data, error } = await supabase
+      .from('group_sessions')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+    if (error) throw error
+    return res.json({ success: true, session: data })
+  } catch (err) { next(err) }
+}
+
+async function adminDeleteSession(req, res, next) {
+  try {
+    const { error } = await supabase
+      .from('group_sessions').delete().eq('id', req.params.id)
+    if (error) throw error
+    return res.json({ success: true })
+  } catch (err) { next(err) }
+}
+
+async function adminUpdateReservation(req, res, next) {
+  try {
+    const allowed = ['payment_status', 'confirmed_at', 'payment_reference', 'payment_method']
+    const updates = {}
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key]
+    }
+    const { data, error } = await supabase
+      .from('group_reservations')
+      .update(updates)
+      .eq('id', req.params.id)
+      .select()
+      .single()
+    if (error) throw error
+    return res.json({ success: true, reservation: data })
+  } catch (err) { next(err) }
+}
+
+async function adminDeleteReservation(req, res, next) {
+  try {
+    const { error } = await supabase
+      .from('group_reservations').delete().eq('id', req.params.id)
+    if (error) throw error
+    return res.json({ success: true })
+  } catch (err) { next(err) }
+}
 // ─────────────────────────────────────────────────────────────
 module.exports = {
   // public
@@ -674,12 +777,9 @@ module.exports = {
   listPosts, createPost, likePost, deletePost,
   getAppointmentNote, upsertAppointmentNote,
   // admin
-  adminListGroups, adminCreateGroup, adminToggleGroup,
-  adminListSessions, adminCreateSession,
+  adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup,  // ← updated
+  adminListSessions, adminCreateSession, adminUpdateSession, adminDeleteSession,  // ← updated
   adminListPosts, adminModeratePost, adminDeletePost,
-  adminListReservations,
-  
-  adminListMemberships,   // ✅ NEW
-  adminUpdateMembership,  // ✅ NEW
-  adminDeleteMembership,  // ✅ NEW
+  adminListReservations, adminUpdateReservation, adminDeleteReservation,  // ← updated
+  adminListMemberships, adminUpdateMembership, adminDeleteMembership,
 }

@@ -399,6 +399,71 @@ router.get('/delivery-riders', guard, async (req, res, next) => {
     res.json({ riders, total: riders.length })
   } catch (err) { next(err) }
 })
+
+const {
+  adminListGroups, adminCreateGroup, adminToggleGroup,
+  adminListSessions, adminCreateSession,
+  adminListPosts, adminModeratePost, adminDeletePost,
+  adminListReservations,
+  adminListMemberships, adminUpdateMembership, adminDeleteMembership,
+} = require('./controllers/communityController')
+
+// ── Community Groups ──────────────────────────────────────────
+router.get('/community-groups',        adminListGroups)
+router.post('/community-groups',       adminCreateGroup)
+router.put('/community-groups/:id',    adminToggleGroup)   // reuse toggle for full update
+router.delete('/community-groups/:id', async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('community_groups').update({ is_active: false }).eq('id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (e) { next(e) }
+})
+
+// ── Group Sessions ────────────────────────────────────────────
+router.get('/group-sessions',          adminListSessions)
+router.post('/group-sessions',         adminCreateSession)
+router.put('/group-sessions/:id',      async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('group_sessions').update(req.body).eq('id', req.params.id).select().single()
+    if (error) throw error
+    res.json({ success: true, session: data })
+  } catch (e) { next(e) }
+})
+router.delete('/group-sessions/:id',   async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('group_sessions').delete().eq('id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (e) { next(e) }
+})
+
+// ── Group Reservations ────────────────────────────────────────
+router.get('/group-reservations',      adminListReservations)
+router.put('/group-reservations/:id',  async (req, res, next) => {
+  try {
+    const { data, error } = await supabase
+      .from('group_reservations').update(req.body).eq('id', req.params.id).select().single()
+    if (error) throw error
+    res.json({ success: true, reservation: data })
+  } catch (e) { next(e) }
+})
+router.delete('/group-reservations/:id', async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('group_reservations').delete().eq('id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (e) { next(e) }
+})
+
+// ── Group Memberships ─────────────────────────────────────────
+router.get('/group-memberships',       adminListMemberships)
+router.put('/group-memberships/:id',   adminUpdateMembership)
+router.delete('/group-memberships/:id', adminDeleteMembership)
  
 // ─── POST /admin/delivery-riders ─────────────────────────────
 // Fixed flow (atomic — rolls back everything on any failure):

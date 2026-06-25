@@ -977,180 +977,7 @@ async function getPublicSocialWorkPrograms(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// ─────────────────────────────────────────────────────────────
-// ASSESSMENTS
-// ─────────────────────────────────────────────────────────────
-async function getAssessments(req, res, next) {
-  try {
-    const { page = 1, limit = 20 } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    const { data, count, error } = await supabase
-      .from('assessments')
-      .select('id, title, slug, description, type, is_active, is_free, created_at', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + Number(limit) - 1)
-    if (error) throw error
-    return res.status(200).json(paginated(data, count, page, limit))
-  } catch (err) { next(err) }
-}
 
-const createAssessment = makeCreate('assessments')
-const updateAssessment = makeUpdate('assessments')
-const deleteAssessment = makeSoftDelete('assessments')
-
-// ─────────────────────────────────────────────────────────────
-// COMMUNITY GROUPS (simple CRUD)
-// ─────────────────────────────────────────────────────────────
-async function getCommunityGroups(req, res, next) {
-  try {
-    const { page = 1, limit = 20, search, q } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    let query = supabase
-      .from('community_groups')
-      .select('id, name, description, emoji, tags, color, is_active, created_at', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + Number(limit) - 1)
-    if (search || q) query = query.or(`name.ilike.%${search || q}%`)
-    const { data, count, error } = await query
-    if (error) throw error
-    return res.status(200).json(paginated(data, count, page, limit))
-  } catch (err) { next(err) }
-}
-
-const createCommunityGroup = makeCreate('community_groups')
-const updateCommunityGroup = makeUpdate('community_groups')
-const deleteCommunityGroup = makeSoftDelete('community_groups')
-
-// ─────────────────────────────────────────────────────────────
-// COMMUNITY ADMIN — Groups with member count
-// ─────────────────────────────────────────────────────────────
-async function adminGetCommunityGroups(req, res, next) {
-  try {
-    const { page = 1, limit = 20 } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    const { data, count, error } = await supabase
-      .from('community_groups')
-      .select(`id, name, description, emoji, tags, color, is_active, created_at, group_memberships ( count )`, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + Number(limit) - 1)
-    if (error) throw error
-    const groups = (data || []).map(g => ({ ...g, member_count: g.group_memberships?.[0]?.count ?? 0, group_memberships: undefined }))
-    return res.status(200).json(paginated(groups, count, page, limit))
-  } catch (err) { next(err) }
-}
-
-// ─────────────────────────────────────────────────────────────
-// COMMUNITY ADMIN — Sessions
-// ─────────────────────────────────────────────────────────────
-async function adminGetSessions(req, res, next) {
-  try {
-    const { page = 1, limit = 50, upcoming } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    let query = supabase
-      .from('v_group_sessions')
-      .select('*', { count: 'exact' })
-      .order('scheduled_at', { ascending: true })
-      .range(offset, offset + Number(limit) - 1)
-    if (upcoming === 'true') query = query.gte('scheduled_at', new Date().toISOString())
-    const { data, count, error } = await query
-    if (error) throw error
-    return res.status(200).json(paginated(data, count, page, limit))
-  } catch (err) { next(err) }
-}
-
-async function adminCreateSessionFull(req, res, next) {
-  try {
-    const { title, facilitator, mode, scheduled_at, max_spots, group_id, notes, price } = req.body
-    if (!title || !scheduled_at || !group_id)
-      return res.status(400).json({ success: false, message: 'title, scheduled_at and group_id are required.' })
-    const { data, error } = await supabase
-      .from('group_sessions')
-      .insert({ title, facilitator, mode: mode || 'Online (Zoom)', scheduled_at, max_spots: max_spots || 20, group_id, notes: notes || null, price: price || 0, is_active: true })
-      .select().single()
-    if (error) throw error
-    return res.status(201).json({ success: true, item: data })
-  } catch (err) { next(err) }
-}
-
-async function adminUpdateSession(req, res, next) {
-  try {
-    const { data, error } = await supabase.from('group_sessions').update(req.body).eq('id', req.params.id).select().single()
-    if (error) throw error
-    return res.status(200).json({ success: true, item: data })
-  } catch (err) { next(err) }
-}
-
-async function adminDeleteSession(req, res, next) {
-  try {
-    const { error } = await supabase.from('group_sessions').update({ is_active: false }).eq('id', req.params.id)
-    if (error) throw error
-    return res.status(200).json({ success: true, message: 'Session deactivated.' })
-  } catch (err) { next(err) }
-}
-
-// ─────────────────────────────────────────────────────────────
-// COMMUNITY ADMIN — Reservations
-// ─────────────────────────────────────────────────────────────
-async function adminGetReservations(req, res, next) {
-  try {
-    const { session_id, page = 1, limit = 100 } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    let query = supabase
-      .from('v_community_reservations')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + Number(limit) - 1)
-    if (session_id) query = query.eq('session_id', session_id)
-    const { data, count, error } = await query
-    if (error) throw error
-    return res.status(200).json(paginated(data, count, page, limit))
-  } catch (err) { next(err) }
-}
-
-async function adminUpdateReservation(req, res, next) {
-  try {
-    const allowed = ['payment_status', 'confirmed_at', 'status', 'cancelled_at']
-    const update  = {}
-    allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k] })
-    const { data, error } = await supabase
-      .from('group_session_reservations')
-      .update(update)
-      .eq('id', req.params.id)
-      .select()
-      .single()
-    if (error) throw error
-    return res.status(200).json({ success: true, item: data })
-  } catch (err) { next(err) }
-}
-
-async function adminDeleteReservation(req, res, next) {
-  try {
-    const { error } = await supabase
-      .from('group_session_reservations')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-      .eq('id', req.params.id)
-    if (error) throw error
-    return res.status(200).json({ success: true })
-  } catch (err) { next(err) }
-}
-
-async function adminGetMemberships(req, res, next) {
-  try {
-    const { group_id, page = 1, limit = 50 } = req.query
-    const offset = (Number(page) - 1) * Number(limit)
-    let query = supabase
-      .from('group_memberships')
-      .select(`id, group_id, user_id, display_name, is_anonymous, email,
-payment_status, payment_method, payment_reference, payment_amount, payment_id,
-community_groups ( id, name, emoji, membership_fee )`, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + Number(limit) - 1)
-    if (group_id) query = query.eq('group_id', group_id)
-    const { data, count, error } = await query
-    if (error) throw error
-    return res.status(200).json(paginated(data, count, page, limit))
-  } catch (err) { next(err) }
-}
 
 // ─────────────────────────────────────────────────────────────
 // FAQs
@@ -1464,7 +1291,101 @@ const adminGetReservations = async (req, res, next) => {
     })
   } catch (err) { next(err) }
 }
+// ─────────────────────────────────────────────────────────────
+// ASSESSMENTS
+// ─────────────────────────────────────────────────────────────
+async function getAssessments(req, res, next) {
+  try {
+    const { page = 1, limit = 20 } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+    const { data, count, error } = await supabase
+      .from('assessments')
+      .select('id, title, slug, description, type, is_active, is_free, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+    if (error) throw error
+    return res.status(200).json(paginated(data, count, page, limit))
+  } catch (err) { next(err) }
+}
+const createAssessment = makeCreate('assessments')
+const updateAssessment = makeUpdate('assessments')
+const deleteAssessment = makeSoftDelete('assessments')
 
+// ─────────────────────────────────────────────────────────────
+// COMMUNITY GROUPS
+// ─────────────────────────────────────────────────────────────
+async function getCommunityGroups(req, res, next) {
+  try {
+    const { page = 1, limit = 20, search, q } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+    let query = supabase
+      .from('community_groups')
+      .select('id, name, description, emoji, tags, color, is_active, membership_fee, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+    if (search || q) query = query.or(`name.ilike.%${search || q}%`)
+    const { data, count, error } = await query
+    if (error) throw error
+    return res.status(200).json(paginated(data, count, page, limit))
+  } catch (err) { next(err) }
+}
+const createCommunityGroup = makeCreate('community_groups')
+const updateCommunityGroup = makeUpdate('community_groups')
+const deleteCommunityGroup = makeSoftDelete('community_groups')
+
+async function adminGetCommunityGroups(req, res, next) {
+  try {
+    const { page = 1, limit = 20 } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+    const { data, count, error } = await supabase
+      .from('community_groups')
+      .select('id, name, description, emoji, tags, color, is_active, membership_fee, created_at, group_memberships ( count )', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+    if (error) throw error
+    const groups = (data || []).map(g => ({ ...g, member_count: g.group_memberships?.[0]?.count ?? 0, group_memberships: undefined }))
+    return res.status(200).json(paginated(groups, count, page, limit))
+  } catch (err) { next(err) }
+}
+
+async function adminUpdateReservation(req, res, next) {
+  try {
+    const allowed = ['payment_status', 'confirmed_at', 'status', 'cancelled_at']
+    const update = {}
+    allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k] })
+    const { data, error } = await supabase
+      .from('group_session_reservations').update(update).eq('id', req.params.id).select().single()
+    if (error) throw error
+    return res.status(200).json({ success: true, item: data })
+  } catch (err) { next(err) }
+}
+
+async function adminDeleteReservation(req, res, next) {
+  try {
+    const { error } = await supabase
+      .from('group_session_reservations')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('id', req.params.id)
+    if (error) throw error
+    return res.status(200).json({ success: true })
+  } catch (err) { next(err) }
+}
+
+async function adminGetMemberships(req, res, next) {
+  try {
+    const { group_id, page = 1, limit = 50 } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+    let query = supabase
+      .from('group_memberships')
+      .select('id, group_id, user_id, display_name, is_anonymous, email, payment_status, payment_method, payment_reference, payment_amount, payment_id, community_groups ( id, name, emoji, membership_fee )', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + Number(limit) - 1)
+    if (group_id) query = query.eq('group_id', group_id)
+    const { data, count, error } = await query
+    if (error) throw error
+    return res.status(200).json(paginated(data, count, page, limit))
+  } catch (err) { next(err) }
+}
 // ─────────────────────────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────────────────────────
@@ -1473,11 +1394,7 @@ module.exports = {
   getDashboard,
   registerStaff,
 
-   adminGetSessions,
-  adminCreateSessionFull,
-  adminUpdateSession,
-  adminDeleteSession,
-  adminGetReservations,
+ 
   // users
   getUsers, toggleUserActive, setUserStatus, setUserRole,
 

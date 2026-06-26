@@ -23,8 +23,7 @@ router.get('/my-reservations',                    authenticate, myReservations)
 router.post('/sessions/:id/reserve',              authenticate, reserveSession)
 router.delete('/sessions/:id/cancel-reservation', authenticate, cancelReservation)
 // direct reservation cancel by reservation id (used by CommunityPage)
-router.delete('/reservations/:reservationId',     authenticate, cancelReservation)
-
+router.delete('/reservations/:reservationId', authenticate, cancelReservation)
 // ── Posts ─────────────────────────────────────────────────────
 router.get('/posts',                       optionalAuth, listPosts)
 router.post('/posts',                      optionalAuth, createPost)

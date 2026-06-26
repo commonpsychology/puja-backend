@@ -155,8 +155,13 @@ async function myGroups(req, res, next) {
 async function listSessions(req, res, next) {
   try {
     const { data, error } = await supabase
-      .from('v_group_sessions')
-      .select('*')
+      .from('group_sessions')
+      .select(`
+        id, title, facilitator, mode, scheduled_at, max_spots,
+        reserved_count, is_full, price, description, duration_minutes,
+        group_id, is_active, created_at,
+        community_groups ( id, name, emoji )
+      `)
       .order('scheduled_at', { ascending: true })
 
     if (error) throw error
@@ -187,8 +192,8 @@ async function reserveSession(req, res, next) {
     const payment_status = clientStatus || (isFree ? 'free' : (payment_method ? 'pending' : 'unpaid'))
     const payment_amount = clientAmount || (isFree ? null : (sess.price || null))
 
-    const { data, error } = await supabase
-      .from('group_session_reservations')
+  const { data, error } = await supabase
+      .from('group_reservations')
       .insert({
         session_id:        sessionId,
         user_id:           userId,
@@ -213,40 +218,46 @@ async function cancelReservation(req, res, next) {
     const userId = req.user?.sub
     if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
-    const { error } = await supabase
-      .from('group_session_reservations')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-      .eq('session_id', req.params.id)
-      .eq('user_id', userId)
+    const reservationId = req.params.reservationId || null
+    const sessionId     = req.params.id            || null
 
+    let query = supabase.from('group_reservations').delete()
+
+    if (reservationId) {
+      query = query.eq('id', reservationId).eq('user_id', userId)
+    } else {
+      query = query.eq('session_id', sessionId).eq('user_id', userId)
+    }
+
+    const { error } = await query
     if (error) throw error
     return res.json({ success: true })
   } catch (err) { next(err) }
 }
-
 async function myReservations(req, res, next) {
   try {
     const userId = req.user?.sub
     if (!userId) return res.json({ success: true, reservations: [] })
 
     const { data, error } = await supabase
-      .from('group_session_reservations')
+      .from('group_reservations')
       .select(`
         id, session_id, payment_status, payment_method,
         payment_reference, payment_amount, payment_id,
-        confirmed_at, status, created_at,
-    group_sessions!group_sessions_group_id_fkey ( id, title, scheduled_at, mode, facilitator, price,
-          community_groups!group_sessions_group_id_fkey ( name, emoji, membership_fee ) )
+        confirmed_at, created_at,
+        group_sessions (
+          id, title, scheduled_at, mode, facilitator, price,
+          community_groups ( name, emoji, membership_fee )
+        )
       `)
       .eq('user_id', userId)
-      .eq('status', 'active')
       .order('created_at', { ascending: false })
 
     if (error) throw error
     return res.json({
-      success: true,
+      success:      true,
       reservations: data || [],
-      sessionIds: (data || []).map(r => r.session_id),
+      sessionIds:   (data || []).map(r => r.session_id),
     })
   } catch (err) { next(err) }
 }
@@ -486,17 +497,22 @@ async function adminListSessions(req, res, next) {
     const { page, limit, offset } = pg(req)
 
     const { data, count, error } = await supabase
-      .from('v_group_sessions')
-      .select('*', { count: 'exact' })
+      .from('group_sessions')
+      .select(`
+        id, title, facilitator, mode, scheduled_at, max_spots,
+        reserved_count, is_full, price, description, duration_minutes,
+        group_id, is_active, created_at,
+        community_groups ( id, name, emoji )
+      `, { count: 'exact' })
       .order('scheduled_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (error) throw error
     return res.json({
-      success: true,
-      items: data || [],
-      sessions: data || [],           // keep for backward compat
-      pagination: { page, limit, total: count ?? (data || []).length },
+      success:    true,
+      items:      data || [],
+      sessions:   data || [],
+      pagination: { page, limit, total: count ?? 0 },
     })
   } catch (err) { next(err) }
 }
@@ -568,7 +584,9 @@ async function adminListReservations(req, res, next) {
     let query = supabase
       .from('group_reservations')
       .select(`
-        *,
+        id, session_id, user_id, display_name, is_anonymous,
+        payment_status, payment_method, payment_reference,
+        payment_amount, payment_id, confirmed_at, created_at,
         group_sessions (
           id, title, facilitator, mode, scheduled_at, price, max_spots,
           community_groups ( id, name, emoji )
@@ -583,10 +601,10 @@ async function adminListReservations(req, res, next) {
     const { data, count, error } = await query
     if (error) throw error
     return res.json({
-      success: true,
-      items: data || [],
+      success:      true,
+      items:        data || [],
       reservations: data || [],
-      pagination: { page, limit, total: count ?? 0 },
+      pagination:   { page, limit, total: count ?? 0 },
     })
   } catch (err) { next(err) }
 }

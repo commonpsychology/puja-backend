@@ -776,7 +776,6 @@ module.exports = {
   listSessions, reserveSession, cancelReservation, myReservations,
   listPosts, createPost, likePost, deletePost,
   getAppointmentNote, upsertAppointmentNote,
-  // admin
 adminListGroups, adminCreateGroup, adminToggleGroup, adminUpdateGroup, adminDeleteGroup,
   adminListSessions, adminCreateSession, adminUpdateSession, adminDeleteSession,  // ← updated
   adminListPosts, adminModeratePost, adminDeletePost,

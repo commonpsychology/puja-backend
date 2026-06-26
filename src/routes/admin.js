@@ -400,13 +400,7 @@ router.get('/delivery-riders', guard, async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-const {
-  adminListGroups, adminCreateGroup, adminToggleGroup,
-  adminListSessions, adminCreateSession,
-  adminListPosts, adminModeratePost, adminDeletePost,
-  adminListReservations,
-  adminListMemberships, adminUpdateMembership, adminDeleteMembership,
-} = require('./controllers/communityController')
+
 
 // ── Community Groups ──────────────────────────────────────────
 router.get('/community-groups',        adminListGroups)

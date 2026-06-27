@@ -35,7 +35,7 @@ const {
   getPsychConcepts, createPsychConcept, updatePsychConcept, deletePsychConcept,
   getSubscriptions, updateSubscription,
   getSettings,      updateSetting,
-} = require('../controllers/adminController')  // ← correct path, NO session functions here
+} = require('./controllers/adminController')  // ← correct path, NO session functions here
 
 const {
   adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup, adminToggleGroup,
@@ -47,7 +47,7 @@ const {
   adminUpdateReservation, adminDeleteReservation,
   adminListMemberships, adminUpdateMembership, adminDeleteMembership,
   adminListPosts, adminModeratePost, adminDeletePost,
-} = require('../controllers/communityController')
+} = require('./controllers/communityController')
 
 // Define the aliases as simple variables after the import:
 const adminGetSessions       = adminListSessions
@@ -66,7 +66,7 @@ const {
   updateGallerySubmission,
   deleteGallerySubmission,
   downloadGallerySubmission,
-} = require('../controllers/volunteerGalleryController')
+} = require('./controllers/volunteerGalleryController')
 
 const {
   getAllPaymentsAdmin,
@@ -74,7 +74,7 @@ const {
   rejectPayment,
   confirmCOD,
   flagCOD,
-} = require('../controllers/paymentConfirmationController')
+} = require('./controllers/paymentConfirmationController')
 
 const {
   adminListBookings,
@@ -84,7 +84,7 @@ const {
   adminCreateRoom,
   adminUpdateRoom,
   adminDeleteRoom,
-} = require('../controllers/roomBookingController')
+} = require('./controllers/roomBookingController')
 
 const supabase = require('../db/supabase')
 

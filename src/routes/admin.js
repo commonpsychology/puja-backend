@@ -22,7 +22,7 @@ getAllOrders, setOrderStatus,
   getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
 
 getPayments, updatePaymentStatus,
-  sendNotificationToClient, adminGetReservations,
+  sendNotificationToClient,
 
   getProducts,  createProduct,  updateProduct,  deleteProduct,
   getPosts,     createPost,     updatePost,     deletePost,
@@ -31,7 +31,7 @@ getPayments, updatePaymentStatus,
  getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
   getResearch,  createResearch, updateResearch, deleteResearch,
 
-  adminGetSessions, adminCreateSessionFull, adminUpdateSession, adminDeleteSession,
+   adminUpdateSession, adminDeleteSession,
 
   getPsychVideos,   createPsychVideo,   updatePsychVideo,   deletePsychVideo,
   getPsychAnalyses, createPsychAnalysis, updatePsychAnalysis, deletePsychAnalysis,
@@ -52,7 +52,7 @@ getPayments, updatePaymentStatus,
 
 const {
   adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup, adminToggleGroup,
-  adminListSessions, adminCreateSession, adminUpdateSession, adminDeleteSession,
+  adminListSessions, adminCreateSession, 
   adminListReservations, adminUpdateReservation, adminDeleteReservation,
   adminListMemberships, adminUpdateMembership, adminDeleteMembership,
   adminListPosts, adminModeratePost, adminDeletePost,

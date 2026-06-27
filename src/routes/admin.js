@@ -48,7 +48,7 @@ getPayments, updatePaymentStatus,
   getPsychConcepts, createPsychConcept, updatePsychConcept, deletePsychConcept,
   getSubscriptions, updateSubscription,
   getSettings,   updateSetting,
-} = require('./controllers/adminController')
+} = require('./controllers/communityController')
 
 const {
   adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup, adminToggleGroup,
@@ -56,7 +56,7 @@ const {
   adminListReservations, adminUpdateReservation, adminDeleteReservation,
   adminListMemberships, adminUpdateMembership, adminDeleteMembership,
   adminListPosts, adminModeratePost, adminDeletePost,
-} = require('./controllers/communityController')
+} = require('../controllers/communityController')
 
 const {
   upload,

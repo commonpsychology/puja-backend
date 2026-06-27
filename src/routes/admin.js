@@ -18,20 +18,20 @@ const {
   getAllAppointments, setAppointmentStatus,
   getTherapists, createTherapist, updateTherapist, deleteTherapist,
 
-  getAllOrders, setOrderStatus, adminUpdateSession,
-
+getAllOrders, setOrderStatus,
   getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
 
-  getPayments, updatePaymentStatus, adminDeleteSession,
-
+getPayments, updatePaymentStatus,
   sendNotificationToClient, adminGetReservations,
 
   getProducts,  createProduct,  updateProduct,  deleteProduct,
   getPosts,     createPost,     updatePost,     deletePost,
   getNews,      createNews,     updateNews,     deleteNews,
   getResources, createResource, updateResource, deleteResource,
-  getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem, adminCreateSessionFull,
-  getResearch,  createResearch, updateResearch, deleteResearch, adminGetSessions,
+ getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
+  getResearch,  createResearch, updateResearch, deleteResearch,
+
+  adminGetSessions, adminCreateSessionFull, adminUpdateSession, adminDeleteSession,
 
   getPsychVideos,   createPsychVideo,   updatePsychVideo,   deletePsychVideo,
   getPsychAnalyses, createPsychAnalysis, updatePsychAnalysis, deletePsychAnalysis,
@@ -55,6 +55,7 @@ const {
   adminListSessions, adminCreateSession, adminUpdateSession, adminDeleteSession,
   adminListReservations, adminUpdateReservation, adminDeleteReservation,
   adminListMemberships, adminUpdateMembership, adminDeleteMembership,
+  adminListPosts, adminModeratePost, adminDeletePost,
 } = require('./controllers/communityController')
 
 const {
@@ -869,13 +870,7 @@ router.patch ('/community/groups/:id/toggle',  guard, adminToggleGroup)
 router.get   ('/community/sessions',           guard, adminListSessions)
 router.post  ('/community/sessions',           guard, adminCreateSession)
 router.get   ('/community/posts',              guard, adminListPosts)
-router.put('/group-sessions/:id',    adminUpdateSession)
-router.put('/group-reservations/:id',    adminUpdateReservation)
-router.delete('/group-reservations/:id', adminDeleteReservation)
-router.delete('/group-sessions/:id', adminDeleteSession)
-router.get('/group-memberships',         adminListMemberships)
-router.put('/group-memberships/:id',     adminUpdateMembership)
-router.delete('/group-memberships/:id',  adminDeleteMembership)
+
 router.patch ('/community/posts/:id/moderate', guard, adminModeratePost)
 router.delete('/community/posts/:id',          guard, adminDeletePost)
 router.get   ('/community/reservations',       guard, adminListReservations)

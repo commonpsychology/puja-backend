@@ -1160,7 +1160,7 @@ const adminGetSessions = async (req, res, next) => {
         id, title, facilitator, description,
         scheduled_at, duration_minutes, mode,
         max_spots, price, reserved_count,
-        spots_left, is_full, group_id,
+        is_full, group_id,
         created_at, updated_at,
         community_groups ( id, name, emoji )
       `, { count: 'exact' })
@@ -1172,8 +1172,15 @@ const adminGetSessions = async (req, res, next) => {
     const { data, error, count } = await query
     if (error) throw error
 
+    const items = (data || []).map(s => ({
+      ...s,
+      reserved_count: s.reserved_count || 0,
+      spots_left: Math.max(0, (s.max_spots || 0) - (s.reserved_count || 0)),
+      is_full: (s.reserved_count || 0) >= (s.max_spots || 0),
+    }))
+
     res.json({
-      items: data || [],
+      items,
       pagination: {
         total: count || 0,
         page:  Number(page),
@@ -1271,9 +1278,9 @@ const adminGetReservations = async (req, res, next) => {
       .select(`
         id, session_id, user_id, display_name, is_anonymous,
         payment_method, payment_reference, payment_status,
-        payment_amount, payment_id, created_at,
+        payment_amount, payment_id, confirmed_at, created_at, status,
         group_sessions (
-          id, title, scheduled_at, mode, price,
+          id, title, scheduled_at, mode, price, max_spots, reserved_count,
           community_groups ( id, name, emoji )
         )
       `, { count: 'exact' })

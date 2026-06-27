@@ -207,15 +207,9 @@ async function reserveSession(req, res, next) {
       })
       .select()
       .single()
+if (error) throw error
 
-    if (error) throw error
-
-    // increment reserved_count on the session
-    const { data: sess } = await supabase
-      .from('group_sessions')
-      .select('reserved_count, max_spots')
-      .eq('id', sessionId)
-      .single()
+    // increment reserved_count on the session row
     const newCount = (sess?.reserved_count || 0) + 1
     await supabase
       .from('group_sessions')

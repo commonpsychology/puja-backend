@@ -10,53 +10,49 @@ const express = require('express')
 const { authenticate } = require('../middleware/auth')
 
 const {
-  getDashboard,
-  registerStaff,
-
+  getDashboard, registerStaff,
   getUsers, toggleUserActive, setUserStatus, setUserRole,
-
   getAllAppointments, setAppointmentStatus,
   getTherapists, createTherapist, updateTherapist, deleteTherapist,
-
-getAllOrders, setOrderStatus,
+  getAllOrders, setOrderStatus,
   getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
-
-getPayments, updatePaymentStatus,
+  getPayments, updatePaymentStatus,
   sendNotificationToClient,
-
   getProducts,  createProduct,  updateProduct,  deleteProduct,
   getPosts,     createPost,     updatePost,     deletePost,
   getNews,      createNews,     updateNews,     deleteNews,
   getResources, createResource, updateResource, deleteResource,
- getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
+  getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
   getResearch,  createResearch, updateResearch, deleteResearch,
-
-   adminUpdateSession, adminDeleteSession,
-
   getPsychVideos,   createPsychVideo,   updatePsychVideo,   deletePsychVideo,
   getPsychAnalyses, createPsychAnalysis, updatePsychAnalysis, deletePsychAnalysis,
-
   getCourses,     createCourse,     updateCourse,     deleteCourse,
   getAssessments, createAssessment, updateAssessment, deleteAssessment,
-
   getCommunityGroups, createCommunityGroup, updateCommunityGroup, deleteCommunityGroup,
-
   getFaqs,    createFaq,    updateFaq,    deleteFaq,
   getCoupons, createCoupon, updateCoupon, deleteCoupon,
-
-  getContacts,   updateContact,      deleteContact,
+  getContacts,      updateContact,      deleteContact,
   getPsychConcepts, createPsychConcept, updatePsychConcept, deletePsychConcept,
   getSubscriptions, updateSubscription,
-  getSettings,   updateSetting,
-} = require('./controllers/communityController')
+  getSettings,      updateSetting,
+} = require('../controllers/adminController')  // ← correct path, NO session functions here
 
 const {
   adminListGroups, adminCreateGroup, adminUpdateGroup, adminDeleteGroup, adminToggleGroup,
-  adminListSessions, adminCreateSession, 
-  adminListReservations, adminUpdateReservation, adminDeleteReservation,
+  adminListSessions,
+  adminCreateSession,
+  adminUpdateSession,
+  adminDeleteSession,
+  adminListReservations,
+  adminUpdateReservation, adminDeleteReservation,
   adminListMemberships, adminUpdateMembership, adminDeleteMembership,
   adminListPosts, adminModeratePost, adminDeletePost,
 } = require('../controllers/communityController')
+
+// Define the aliases as simple variables after the import:
+const adminGetSessions       = adminListSessions
+const adminCreateSessionFull = adminCreateSession
+const adminGetReservations   = adminListReservations  // ← correct path
 
 const {
   upload,
@@ -70,7 +66,7 @@ const {
   updateGallerySubmission,
   deleteGallerySubmission,
   downloadGallerySubmission,
-} = require('./controllers/volunteerGalleryController')
+} = require('../controllers/volunteerGalleryController')
 
 const {
   getAllPaymentsAdmin,
@@ -78,7 +74,7 @@ const {
   rejectPayment,
   confirmCOD,
   flagCOD,
-} = require('./controllers/paymentConfirmationController')
+} = require('../controllers/paymentConfirmationController')
 
 const {
   adminListBookings,
@@ -88,7 +84,7 @@ const {
   adminCreateRoom,
   adminUpdateRoom,
   adminDeleteRoom,
-} = require('./controllers/roomBookingController')
+} = require('../controllers/roomBookingController')
 
 const supabase = require('../db/supabase')
 

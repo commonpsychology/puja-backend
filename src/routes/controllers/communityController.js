@@ -154,6 +154,8 @@ async function myGroups(req, res, next) {
 
 async function listSessions(req, res, next) {
   try {
+    const now = new Date().toISOString()
+
     const { data, error } = await supabase
       .from('group_sessions')
       .select(`
@@ -162,6 +164,8 @@ async function listSessions(req, res, next) {
         group_id, is_active, created_at,
         community_groups ( id, name, emoji )
       `)
+      .eq('is_active', true)
+      .gte('scheduled_at', now)
       .order('scheduled_at', { ascending: true })
 
     if (error) throw error

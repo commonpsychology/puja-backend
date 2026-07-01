@@ -136,10 +136,10 @@ async function approvePayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-    // Cascade: confirm linked appointment
+   // Cascade: confirm linked appointment
     if (payment.appointment_id) {
       await supabase.from('appointments')
-        .update({ status: 'confirmed' })
+        .update({ status: 'confirmed', payment_status: 'completed' })
         .eq('id', payment.appointment_id)
         .in('status', ['pending'])
     }
@@ -241,10 +241,17 @@ async function confirmCOD(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-    if (payment.order_id) {
+   if (payment.order_id) {
       await supabase.from('orders')
         .update({ status: 'delivered' })
         .eq('id', payment.order_id)
+    }
+
+    if (payment.appointment_id) {
+      await supabase.from('appointments')
+        .update({ status: 'confirmed', payment_status: 'completed' })
+        .eq('id', payment.appointment_id)
+        .in('status', ['pending'])
     }
 
     await sendNotification(payment.client_id, {

@@ -260,7 +260,7 @@ const cancelAppointment = async (req, res) => {
     // Only relabel payment_status if it was never paid — preserves the record
     // for bookings that *were* paid and are being cancelled for other reasons.
     if (existing.payment_status === 'unpaid') {
-      updatePayload.payment_status = 'cancelled_unpaid'
+      updatePayload.payment_status = 'failed'
     }
 
     const { data, error } = await supabase
@@ -308,7 +308,7 @@ const expireStaleHolds = async () => {
 
   const { data, error } = await supabase
     .from('appointments')
-    .update({ status: 'cancelled', payment_status: 'cancelled_unpaid' })
+    .update({ status: 'cancelled', payment_status: 'failed' })
     .eq('status', 'pending')
     .eq('payment_status', 'unpaid')
     .lt('created_at', cutoff)

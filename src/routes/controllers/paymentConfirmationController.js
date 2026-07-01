@@ -249,14 +249,12 @@ async function approvePayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-   if (payment.appointment_id) {
-  await supabase.from('appointments')
-    .update({
-      status:         'confirmed',
-      payment_status: 'paid',        // ← THE MISSING LINE
-    })
-    .eq('id', payment.appointment_id)
-}
+  if (payment.appointment_id) {
+      await supabase.from('appointments')
+        .update({ status: 'confirmed', payment_status: 'paid' })
+        .eq('id', payment.appointment_id)
+        .in('status', ['pending'])
+    }
     if (payment.order_id) {
       await supabase.from('orders')
         .update({ status: 'confirmed' })
@@ -357,6 +355,13 @@ async function confirmCOD(req, res, next) {
       await supabase.from('orders')
         .update({ status: 'delivered' })
         .eq('id', payment.order_id)
+    }
+
+    if (payment.appointment_id) {
+      await supabase.from('appointments')
+        .update({ status: 'confirmed', payment_status: 'paid' })
+        .eq('id', payment.appointment_id)
+        .in('status', ['pending'])
     }
 
     await sendNotification(payment.client_id, {

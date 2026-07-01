@@ -18,7 +18,6 @@ async function logAudit(actorId, action, tableN, recordId, newData = {}) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/coupons/validate
-// Checks coupon validity without claiming it. Returns coupon data for UI.
 // ─────────────────────────────────────────────────────────────────────────────
 async function validateCoupon(req, res, next) {
   try {
@@ -37,7 +36,6 @@ async function validateCoupon(req, res, next) {
     if (error || !coupon)
       return res.status(404).json({ success: false, message: 'Coupon not found.' })
 
-    // Already claimed by someone
     if (coupon.used_by)
       return res.status(400).json({
         success: false,
@@ -46,18 +44,15 @@ async function validateCoupon(req, res, next) {
         claimedAt: coupon.used_at,
       })
 
-    // Expired
     if (coupon.expires_at && new Date(coupon.expires_at) < new Date())
       return res.status(400).json({ success: false, message: 'This coupon has expired.' })
 
-    // Minimum order check
     if (amount && coupon.min_amount && Number(amount) < Number(coupon.min_amount))
       return res.status(400).json({
         success: false,
         message: `This coupon requires a minimum order of NPR ${Number(coupon.min_amount).toLocaleString()}.`,
       })
 
-    // Compute preview discount
     const baseAmount = Number(amount) || 0
     const discount = coupon.type === 'percentage'
       ? Math.round(baseAmount * coupon.value / 100)
@@ -79,24 +74,25 @@ async function validateCoupon(req, res, next) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/initiate  &  POST /api/payments
-// Creates payment record. Atomically claims coupon if provided.
 // ─────────────────────────────────────────────────────────────────────────────
 async function initiatePayment(req, res, next) {
   try {
     const userId = getUserId(req)
     if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
-   const {
-  appointment_id, appointmentId,   // ← accept both
-  order_id,       orderId,         // ← accept both
-  amount, currency = 'NPR',
-  method, transactionId, gatewayResponse,
-  workshopId, courseId, referenceCode, notes,
-  coupon_code, couponCode,
-} = req.body
+    const {
+      appointment_id, appointmentId,   // ← accept both
+      order_id,       orderId,         // ← accept both
+      amount, currency = 'NPR',
+      method, transactionId, gatewayResponse,
+      workshopId, courseId, referenceCode, notes,
+      coupon_code, couponCode,
+    } = req.body
 
-const apptId   = appointment_id || appointmentId || null
-const orderIdN = order_id       || orderId       || null
+    // ✅ FIX: single source of truth used EVERYWHERE below, no more mixing
+    // the normalized var with the raw destructured one.
+    const apptId   = appointment_id || appointmentId || null
+    const orderIdN = order_id       || orderId       || null
 
     if (!amount || !method)
       return res.status(400).json({ success: false, message: 'amount and method are required.' })
@@ -108,7 +104,6 @@ const orderIdN = order_id       || orderId       || null
     // ── Coupon claiming (atomic) ──────────────────────────────────────────
     const rawCode = (coupon_code || couponCode || '').trim().toUpperCase()
     if (rawCode) {
-      // Fetch coupon
       const { data: coupon, error: couponFetchErr } = await supabase
         .from('coupons')
         .select('*')
@@ -128,12 +123,11 @@ const orderIdN = order_id       || orderId       || null
       if (coupon.expires_at && new Date(coupon.expires_at) < new Date())
         return res.status(400).json({ success: false, message: 'Coupon has expired.' })
 
-      // Atomic claim — only succeeds if used_by IS NULL (race-condition safe)
       const { data: claimed, error: claimErr } = await supabase
         .from('coupons')
         .update({ used_by: userId, used_at: new Date().toISOString() })
         .eq('id', coupon.id)
-        .is('used_by', null)   // ← only update if still unclaimed
+        .is('used_by', null)
         .select()
         .single()
 
@@ -144,7 +138,6 @@ const orderIdN = order_id       || orderId       || null
           alreadyClaimed: true,
         })
 
-      // Compute discount
       discountAmount = coupon.type === 'percentage'
         ? Math.round(Number(amount) * coupon.value / 100)
         : Number(coupon.value)
@@ -153,7 +146,7 @@ const orderIdN = order_id       || orderId       || null
       couponId    = coupon.id
     }
 
-const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
+    const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
 
     const initialStatus = method === 'cash' || method === 'cod'
       ? 'pending_cod'
@@ -172,8 +165,8 @@ const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
 
     const insertPayload = {
       client_id:        userId,
-     appointment_id:   apptId,
-order_id:         orderIdN,
+      appointment_id:   apptId,
+      order_id:         orderIdN,
       coupon_id:        couponId,
       amount:           finalAmount,
       currency,
@@ -192,6 +185,17 @@ order_id:         orderIdN,
 
     if (error) throw error
 
+    // ✅ FIX: use apptId (normalized), not the raw appointmentId variable.
+    // This is the line that was silently no-op'ing whenever the caller sent
+    // snake_case appointment_id.
+    if (apptId) {
+      await supabase.from('appointments')
+        .update({ payment_status: 'pending' })
+        .eq('id', apptId)
+        .eq('payment_status', 'unpaid')
+    }
+
+    // Notify admin of new pending payment (QR / digital wallet)
     if (method !== 'cash' && method !== 'cod') {
       const adminProfiles = await supabase
         .from('profiles').select('id').eq('role', 'admin')
@@ -218,7 +222,7 @@ order_id:         orderIdN,
   } catch (err) { next(err) }
 }
 
-// ─── All other functions unchanged ───────────────────────────────────────────
+// ─── All other functions ───────────────────────────────────────────
 
 async function approvePayment(req, res, next) {
   try {
@@ -249,7 +253,7 @@ async function approvePayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-  if (payment.appointment_id) {
+    if (payment.appointment_id) {
       await supabase.from('appointments')
         .update({ status: 'confirmed', payment_status: 'paid' })
         .eq('id', payment.appointment_id)
@@ -300,11 +304,10 @@ async function rejectPayment(req, res, next) {
     if (updateErr) throw updateErr
 
     if (payment.appointment_id) {
-  await supabase.from('appointments')
-    .update({ payment_status: 'unpaid' })
-    .eq('id', payment.appointment_id)
-}
-    // If payment had a coupon, release it back (unclaim)
+      await supabase.from('appointments')
+        .update({ payment_status: 'unpaid' })
+        .eq('id', payment.appointment_id)
+    }
     if (payment.coupon_id) {
       await supabase.from('coupons')
         .update({ used_by: null, used_at: null })
@@ -401,11 +404,18 @@ async function flagCOD(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (error) throw error
 
-    // Release coupon if flagged
     if (payment.coupon_id) {
       await supabase.from('coupons')
         .update({ used_by: null, used_at: null })
         .eq('id', payment.coupon_id)
+    }
+
+    // ✅ FIX: flagCOD previously left the appointment stuck at
+    // payment_status:'pending' forever. Now it resets like rejectPayment does.
+    if (payment.appointment_id) {
+      await supabase.from('appointments')
+        .update({ payment_status: 'unpaid' })
+        .eq('id', payment.appointment_id)
     }
 
     if (payment.order_id) {
@@ -632,16 +642,14 @@ async function updatePaymentStatus(req, res, next) {
       })
     }
 
-    // Fetch existing payment
     const { data: payment, error: fetchErr } = await supabase
       .from('payments').select('*').eq('id', id).single()
     if (fetchErr || !payment)
       return res.status(404).json({ success: false, message: 'Payment not found.' })
 
     if (payment.status === status)
-      return res.status(200).json({ success: true, payment }) // already in target state, no-op
+      return res.status(200).json({ success: true, payment })
 
-    // Build update payload
     const updatePayload = {
       status,
       ...(status === 'completed' ? { paid_at: new Date().toISOString() } : {}),
@@ -656,7 +664,6 @@ async function updatePaymentStatus(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-    // Map payment status → appointment payment_status
     const apptPaymentStatus = {
       completed: 'paid',
       failed:    'failed',
@@ -664,7 +671,6 @@ async function updatePaymentStatus(req, res, next) {
       pending:   'pending',
     }[status]
 
-    // Sync linked appointment
     if (payment.appointment_id && apptPaymentStatus) {
       const apptUpdate = { payment_status: apptPaymentStatus }
       if (status === 'completed') apptUpdate.status = 'confirmed'
@@ -673,7 +679,6 @@ async function updatePaymentStatus(req, res, next) {
         .eq('id', payment.appointment_id)
     }
 
-    // Sync linked order
     if (payment.order_id && status === 'completed') {
       await supabase.from('orders')
         .update({ status: 'confirmed' })
@@ -681,14 +686,12 @@ async function updatePaymentStatus(req, res, next) {
         .in('status', ['pending'])
     }
 
-    // Release coupon if payment failed/refunded
     if (['failed', 'refunded'].includes(status) && payment.coupon_id) {
       await supabase.from('coupons')
         .update({ used_by: null, used_at: null })
         .eq('id', payment.coupon_id)
     }
 
-    // Notify client on completion
     if (status === 'completed') {
       await sendNotification(payment.client_id, {
         title:   '✅ Payment Confirmed!',
@@ -710,8 +713,7 @@ module.exports = {
   validateCoupon,
   approvePayment,
   rejectPayment,
-    updatePaymentStatus,   
-
+  updatePaymentStatus,
   confirmCOD,
   flagCOD,
   getAllPaymentsAdmin,

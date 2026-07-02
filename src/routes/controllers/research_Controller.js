@@ -165,11 +165,56 @@ const proxyPdf = async (req, res) => {
     res.status(500).json({ success: false, message: err.message })
   }
 }
+const getPapers = async (req, res) => {
+  try {
+    const { type, search, sortBy = 'year', page = 1, limit = 20 } = req.query
+
+    let query = supabase
+      .from('research_papers')
+      .select('*', { count: 'exact' })
+
+    if (type && type !== 'All') query = query.eq('type', type)
+    if (search) {
+      query = query.or(`title.ilike.%${search}%,abstract.ilike.%${search}%`)
+    }
+
+    const colMap = { year: 'year', citations: 'citations', downloads: 'downloads' }
+    const col = colMap[sortBy] || 'year'
+    query = query.order(col, { ascending: false })
+
+    const from = (Number(page) - 1) * Number(limit)
+    query = query.range(from, from + Number(limit) - 1)
+
+    const { data, error, count } = await query
+    if (error) throw error
+    res.json({ success: true, data, total: count })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+}
+
+// GET /api/research/:id  — no more auto-increment here
+const getPaperById = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('research_papers')
+      .select('*')
+      .eq('id', req.params.id)
+      .single()
+    if (error) throw error
+    if (!data) return res.status(404).json({ success: false, message: 'Paper not found' })
+
+    res.json({ success: true, data })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+}
 
 module.exports = {
   getPapers,
   getTypes,
   getStats,
+  getPaperById,
   proxyPdf,
   getPaperById,
   createPaper,

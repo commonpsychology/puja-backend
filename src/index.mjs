@@ -52,6 +52,8 @@ const dreamsRouter        = require('./routes/dreamsRoute')
 const patientsRoute        = require('./routes/patient')
 const deliveryRoutes      = require('./routes/deliveryRoutes')
 const esewaRouter         = require('./routes/esewa')
+  const donationRoutes = require('./routes/donationRoutes');
+
 
 const app  = express()
 const PORT = process.env.PORT || 5000
@@ -164,6 +166,7 @@ app.use('/api/admin',                adminRoutes)
 app.use('/api/store',                storeRoutes)
 app.use('/api/wellness',             wellnessRoutes)
 app.use('/api/social-work-programs', socialWorkRoutes)
+  app.use('/api/donations', donationRoutes);
 
 app.get('/api/mood', (_req, res) => res.json({ success: true, moods: [] }))
 

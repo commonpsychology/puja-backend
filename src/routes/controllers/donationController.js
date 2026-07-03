@@ -1,5 +1,5 @@
 // src/routes/controllers/donationController.js
-const supabase = require('../../src/config/supabaseClient');
+const supabase = require('../../db/supabase')
 
 // Adjust this to your real currency -> liters conversion logic.
 // Example: $1 funds 12 liters of clean water.

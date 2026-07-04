@@ -4,6 +4,8 @@ const supabase = require('../../db/supabase')
 // GET /api/blog?category=&search=&page=1&limit=20&featured=true
 const getPosts = async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store')   // ← new line goes here
+
     const { category, search, page = 1, limit = 20, featured } = req.query
 
     let query = supabase

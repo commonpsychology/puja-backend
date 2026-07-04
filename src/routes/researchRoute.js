@@ -10,7 +10,6 @@ router.get('/:id/pdf', ctrl.proxyPdf)
 router.get('/',       ctrl.getPapers)
 router.get('/types',  ctrl.getTypes)   // static BEFORE /:id
 router.get('/stats',  ctrl.getStats)   // static BEFORE /:id
-router.post('/research/:id/download', researchController.trackDownload)   // ← new line, added here
 
 
 // POST /api/research/:id/download  ← MUST be before /:id GET

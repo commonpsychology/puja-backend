@@ -373,8 +373,24 @@ export async function verifyOTP({
     )
   }
 
-  // ── Mark verified ────────────────────────────────────────────
+ // ── Mark verified ────────────────────────────────────────────
   await supabase.from('otp_verifications').update({ verified: true }).eq('id', row.id)
+
+  // ── Flip the profile's verification flag ──────────────────────
+  // This is what actually unlocks login — without this, login stays
+  // blocked forever even after a correct OTP.
+  if (otp_type === 'email_verify') {
+    const match = row.user_id
+      ? { column: 'id', value: row.user_id }
+      : { column: 'email', value: row.email }
+
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .update({ is_email_verified: true })
+      .eq(match.column, match.value)
+
+    if (profileErr) console.error('[OTP] Failed to mark profile verified:', profileErr.message)
+  }
 
   await audit({ otp_id: row.id, user_id: row.user_id, email, phone: normalizedPhone, otp_type, action: 'verified', ip_address, user_agent })
 

@@ -76,13 +76,16 @@ const { name, email, password, phone, emergency_contact_name, emergency_contact_
   // 3. Create profile
   const { data: profile, error: profileError } = await supabase
   .from('profiles')
-  .insert({
+ .insert({
     full_name:         name,
     email:             email.toLowerCase(),
     password_hash,
-    phone:             phone || null,   // ← ADD THIS LINE
+    phone:             phone || null,
+    emergency_contact_name:     emergency_contact_name || null,
+    emergency_contact_phone:    emergency_contact_phone || null,
+    emergency_contact_relation: emergency_contact_relation || null,
     role:              'client',
-    is_email_verified: true,
+    is_email_verified: false,
     is_active:         true,
   })
   .select()
@@ -150,13 +153,13 @@ const login = async (req, res) => {
     return res.status(403).json({ success: false, message: 'Your account has been deactivated. Please contact support.' })
   }
 
-  // 4. Require email verification
-  // if (!profile.is_email_verified) {
-  //   return res.status(403).json({
-  //     success: false,
-  //     message: 'Please verify your email before logging in.',
-  //   })
-  // }
+// 4. Require email verification
+  if (!profile.is_email_verified) {
+    return res.status(403).json({
+      success: false,
+      message: 'Please verify your email before logging in.',
+    })
+  }
 
   // 5. Sign tokens
   const tokenPayload = { sub: profile.id, email: profile.email, role: profile.role }

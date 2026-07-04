@@ -32,7 +32,6 @@ const getPosts = async (req, res) => {
   }
 }
 
-// GET /api/blog/:slug
 const getPostBySlug = async (req, res) => {
   try {
     const { slug } = req.params
@@ -45,14 +44,17 @@ const getPostBySlug = async (req, res) => {
     if (error) throw error
     if (!data) return res.status(404).json({ success: false, message: 'Post not found' })
 
-    // increment views (fire-and-forget — don't block the response)
-    supabase
-      .from('blog_posts')
-      .update({ views: (data.views || 0) + 1 })
-      .eq('slug', slug)
-      .then(() => {})
+    // Atomic increment — avoids lost updates from concurrent visits
+    const { data: newViews, error: rpcError } = await supabase
+      .rpc('increment_blog_views', { post_slug: slug })
 
-    res.json({ success: true, data })
+    if (rpcError) console.error('Failed to increment blog views:', rpcError.message)
+
+    // Return the count that reflects THIS visit, not the pre-increment snapshot
+    res.json({
+      success: true,
+      data: { ...data, views: rpcError ? (data.views || 0) : newViews },
+    })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }

@@ -46,11 +46,12 @@ const getStats = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('research_papers')
-      .select('citations, downloads')
+      .select('citations, downloads, views')
     if (error) throw error
 
     const totalCitations = data.reduce((s, r) => s + (r.citations || 0), 0)
     const totalDownloads = data.reduce((s, r) => s + (r.downloads || 0), 0)
+    const totalViews     = data.reduce((s, r) => s + (r.views || 0), 0)
 
     res.json({
       success: true,
@@ -58,6 +59,7 @@ const getStats = async (req, res) => {
         publications: data.length,
         citations: totalCitations,
         downloads: totalDownloads,
+        views: totalViews,
       },
     })
   } catch (err) {
@@ -76,14 +78,16 @@ const getPaperById = async (req, res) => {
     if (error) throw error
     if (!data) return res.status(404).json({ success: false, message: 'Paper not found' })
 
-    // bump downloads (fire-and-forget)
-    supabase
-      .from('research_papers')
-      .update({ downloads: (data.downloads || 0) + 1 })
-      .eq('id', req.params.id)
-      .then(() => {})
+    // Atomic view increment — separate column from downloads, no more double-counting
+    const { data: newViews, error: rpcError } = await supabase
+      .rpc('increment_research_views', { research_id: req.params.id })
 
-    res.json({ success: true, data })
+    if (rpcError) console.error('Failed to increment research views:', rpcError.message)
+
+    res.json({
+      success: true,
+      data: { ...data, views: rpcError ? (data.views || 0) : newViews },
+    })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }
@@ -173,7 +177,6 @@ module.exports = {
   getStats,
   getPaperById,
   proxyPdf,
-  getPaperById,
   createPaper,
   updatePaper,
   deletePaper,

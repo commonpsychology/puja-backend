@@ -15,11 +15,12 @@ router.get('/stats',  ctrl.getStats)   // static BEFORE /:id
 router.post('/:id/download', async (req, res) => {
   try {
     const { id } = req.params
-    const { error } = await supabase.rpc('increment_research_downloads', { research_id: id })
+    const { data: newDownloads, error } = await supabase
+      .rpc('increment_research_downloads', { research_id: id })
     if (error) throw error
-    res.json({ ok: true })
+    res.json({ ok: true, downloads: newDownloads })
   } catch (e) {
-    res.json({ ok: false, message: e.message })
+    res.status(500).json({ ok: false, message: e.message })
   }
 })
 

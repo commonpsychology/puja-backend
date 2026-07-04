@@ -196,7 +196,7 @@ async function getUsers(req, res, next) {
 
     let query = supabase
       .from('profiles')
-      .select('id, full_name, email, phone, role, is_active, is_email_verified, department, created_at', { count: 'exact' })
+      .select('id, full_name, email, phone, role, is_active, is_email_verified, department, created_at, emergency_contact_name, emergency_contact_phone, emergency_contact_relation', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + Number(limit) - 1)
 

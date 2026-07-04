@@ -10,7 +10,6 @@ const {
 
 const router = express.Router()
 
-// All profile routes are protected
 router.use(authenticate)
 
 router.get('/',               getProfile)

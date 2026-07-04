@@ -22,6 +22,9 @@ const safeProfile = (p) => ({
   country:         p.country,
   language:        p.language,
   bio:             p.bio,
+  emergencyContactName:     p.emergency_contact_name,
+  emergencyContactPhone:    p.emergency_contact_phone,
+  emergencyContactRelation: p.emergency_contact_relation,
   role:            p.role,
   isEmailVerified: p.is_email_verified,
   createdAt:       p.created_at,
@@ -47,7 +50,7 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   const allowed = [
     'full_name','display_name','phone','date_of_birth',
-    'gender','address','city','country','language','bio','emergency_contact',
+    'gender','address','city','country','language','bio','emergency_contact_name','emergency_contact_phone','emergency_contact_relation'
   ]
 
  const NULL_IF_EMPTY = ['date_of_birth', 'gender']

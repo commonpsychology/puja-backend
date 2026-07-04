@@ -55,8 +55,7 @@ const safeProfile = (p) => ({
 const register = async (req, res) => {
   if (!validate(req, res)) return
 
-const { name, email, password, phone } = req.body
-
+const { name, email, password, phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relation } = req.body
   // 1. Duplicate email check
   const { data: existing } = await supabase
     .from('profiles')

@@ -35,6 +35,7 @@ const {
   getPsychConcepts, createPsychConcept, updatePsychConcept, deletePsychConcept,
   getSubscriptions, updateSubscription,
   getSettings,      updateSetting,
+  getSmsTemplates, getSmsRecipients, sendAdminSms, getSmsLogs,
 } = require('./controllers/adminController')  // ← correct path, NO session functions here
 
 const {
@@ -212,6 +213,12 @@ router.delete('/therapists/:id', guard, deleteTherapist)
 
 // ─── Notifications ───────────────────────────────────────────
 router.post('/notifications', guard, sendNotificationToClient)
+
+// ─── SMS ──────────────────────────────────────────────────────
+router.get ('/sms/templates',  guard, getSmsTemplates)
+router.get ('/sms/recipients', guard, getSmsRecipients)
+router.post('/sms/send',       guard, sendAdminSms)
+router.get ('/sms/logs',       guard, getSmsLogs)
 
 // ─── Psych Concepts ──────────────────────────────────────────
 router.get   ('/psych-concepts',     guard, getPsychConcepts)

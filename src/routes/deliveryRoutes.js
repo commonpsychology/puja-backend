@@ -260,11 +260,11 @@ router.get('/my-orders', async (req, res) => {
     if (dsFilter && !VALID_DS.includes(dsFilter))
       return res.status(400).json({ message: 'Invalid delivery_status filter.' })
 
-   let q = supabase
+  let q = supabase
   .from('orders')
   .select(`
     id, order_number, status, total_amount,
-    delivery_status, delivery_address, delivery_note,
+    delivery_status, delivery_address, delivery_note, shipping_address,
     picked_up_at, delivered_at, failed_at, created_at, updated_at,
     profiles!orders_client_id_fkey ( full_name )
   `, { count: 'exact' })

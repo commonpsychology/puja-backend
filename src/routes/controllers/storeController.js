@@ -208,7 +208,11 @@ const getOrder = async (req, res) => {
 const createOrder = async (req, res) => {
   console.log('createOrder called, user:', req.user?.sub)
   
-  const { shippingAddress, billingAddress, notes, couponCode } = req.body
+ const { shippingAddress, billingAddress, notes, couponCode } = req.body
+
+if (!shippingAddress || !shippingAddress.full_name || !shippingAddress.phone || !shippingAddress.address_line || !shippingAddress.city) {
+  return res.status(400).json({ success: false, message: 'A complete delivery address is required.' })
+}
 
   const { data: cartItems, error: cartError } = await supabase
     .from('cart_items')

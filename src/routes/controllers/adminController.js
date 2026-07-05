@@ -4,7 +4,7 @@
 const bcrypt   = require('bcryptjs')
 const supabase = require('../../db/supabase')
 const { getAllPaymentsAdmin } = require('./paymentController')
-
+const { sendSms: sendSparrowSms } = require('../services/sparrowSms')
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -1394,10 +1394,137 @@ async function adminGetMemberships(req, res, next) {
   } catch (err) { next(err) }
 }
 // ─────────────────────────────────────────────────────────────
+// SMS
+// ─────────────────────────────────────────────────────────────
+const SMS_TEMPLATES = {
+  customer: [
+    { id: 'order_placed',    label: 'Order Placed',     text: 'Hi {name}, your order {order_number} has been placed. - Common Psychology' },
+    { id: 'order_shipped',   label: 'Out for Delivery',  text: 'Hi {name}, your order {order_number} is out for delivery.' },
+    { id: 'order_delivered', label: 'Order Delivered',   text: 'Hi {name}, your order {order_number} has been delivered. Thank you!' },
+  ],
+  staff: [
+    { id: 'shift_reminder', label: 'Shift Reminder', text: 'Hi {name}, reminder: your shift starts at {time} today.' },
+    { id: 'meeting',        label: 'Meeting Notice',  text: 'Hi {name}, staff meeting on {date} at {time}.' },
+  ],
+  rider: [
+    { id: 'order_assigned', label: 'Order Assigned', text: 'Hi {name}, delivery {order_number} has been assigned to you.' },
+    { id: 'urgent',         label: 'Urgent Delivery', text: 'Hi {name}, order {order_number} needs urgent delivery.' },
+  ],
+  therapist: [
+    { id: 'appt_reminder',  label: 'Appointment Reminder',  text: 'Hi {name}, appointment with {client_name} on {date} at {time}.' },
+    { id: 'appt_cancelled', label: 'Appointment Cancelled', text: 'Hi {name}, appointment with {client_name} on {date} was cancelled.' },
+  ],
+}
+
+// Mirrors the two-step user_id → profiles join pattern already used in getTherapists()
+async function fetchSmsRecipients(role, { search, ids } = {}) {
+  if (role === 'customer' || role === 'staff') {
+    const dbRole = role === 'customer' ? 'client' : 'staff'
+    let query = supabase.from('profiles').select('id, full_name, phone').eq('role', dbRole).not('phone', 'is', null)
+    if (ids)    query = query.in('id', ids)
+    if (search) query = query.or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`)
+    const { data, error } = await query
+    if (error) throw error
+    return data || []
+  }
+
+  if (role === 'rider') {
+    let query = supabase.from('delivery_riders').select('id, user_id, area')
+    if (ids) query = query.in('id', ids)
+    const { data: riders, error } = await query
+    if (error) throw error
+    if (!riders?.length) return []
+
+    const userIds = riders.map(r => r.user_id).filter(Boolean)
+    const { data: profiles, error: pe } = await supabase
+      .from('profiles').select('id, full_name, phone').in('id', userIds).not('phone', 'is', null)
+    if (pe) throw pe
+
+    const map = {}
+    ;(profiles || []).forEach(p => { map[p.id] = p })
+
+    let rows = riders
+      .filter(r => map[r.user_id]?.phone)
+      .map(r => ({ id: r.id, full_name: map[r.user_id].full_name || r.area || '—', phone: map[r.user_id].phone }))
+    if (search) rows = rows.filter(r => r.full_name.toLowerCase().includes(search.toLowerCase()) || r.phone.includes(search))
+    return rows
+  }
+
+  if (role === 'therapist') {
+    let query = supabase.from('therapists').select('id, user_id')
+    if (ids) query = query.in('id', ids)
+    const { data: therapists, error } = await query
+    if (error) throw error
+    if (!therapists?.length) return []
+
+    const userIds = therapists.map(t => t.user_id).filter(Boolean)
+    const { data: profiles, error: pe } = await supabase
+      .from('profiles').select('id, full_name, phone').in('id', userIds).not('phone', 'is', null)
+    if (pe) throw pe
+
+    const map = {}
+    ;(profiles || []).forEach(p => { map[p.id] = p })
+
+    let rows = therapists
+      .filter(t => map[t.user_id]?.phone)
+      .map(t => ({ id: t.id, full_name: map[t.user_id].full_name, phone: map[t.user_id].phone }))
+    if (search) rows = rows.filter(r => r.full_name.toLowerCase().includes(search.toLowerCase()) || r.phone.includes(search))
+    return rows
+  }
+
+  throw new Error('Invalid role')
+}
+
+async function getSmsTemplates(req, res, next) {
+  try { return res.status(200).json(SMS_TEMPLATES) } catch (err) { next(err) }
+}
+
+async function getSmsRecipients(req, res, next) {
+  try {
+    const { role, search } = req.query
+    const rows = await fetchSmsRecipients(role, { search })
+    const items = rows.map(r => ({ id: r.id, name: r.full_name, phone: r.phone }))
+    return res.status(200).json({ success: true, items })
+  } catch (err) { next(err) }
+}
+
+async function sendAdminSms(req, res, next) {
+  try {
+    const { mode, role, recipient_ids, message } = req.body
+    if (!message?.trim()) return res.status(400).json({ success: false, message: 'Message text is required.' })
+
+    const targets = await fetchSmsRecipients(role, { ids: mode === 'select' ? (recipient_ids || []) : undefined })
+    if (!targets.length) return res.status(400).json({ success: false, message: 'No valid phone numbers found.' })
+
+    const phoneList = targets.map(t => String(t.phone).replace(/\D/g, ''))
+    const result = await sendSparrowSms(phoneList, message)
+
+    const { error: le } = await supabase.from('sms_logs').insert({
+      sent_by: req.user?.sub || req.user?.id || null,
+      role,
+      recipient_count: targets.length,
+      message,
+      provider_response: result,
+    })
+    if (le) console.error('sms_logs insert failed:', le.message)
+
+    return res.status(200).json({ success: true, sent: targets.length, result })
+  } catch (err) { next(err) }
+}
+
+async function getSmsLogs(req, res, next) {
+  try {
+    const { data, error } = await supabase
+      .from('sms_logs').select('*').order('created_at', { ascending: false }).limit(100)
+    if (error) throw error
+    return res.status(200).json({ success: true, items: data || [] })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────
 // EXPORTS
 // ─────────────────────────────────────────────────────────────
 module.exports = {
-  // dashboard
   getDashboard,
   registerStaff,
 
@@ -1482,6 +1609,11 @@ module.exports = {
   getMyTherapistAppointments,
 
   // social work
+  // social work
   getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
   getPublicSocialWorkPrograms,
+
+  // sms
+  getSmsTemplates, getSmsRecipients, sendAdminSms, getSmsLogs,
+
 }

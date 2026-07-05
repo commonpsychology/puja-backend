@@ -38,6 +38,12 @@ router.patch('/payments/:id',  guard, c.updatePaymentStatus)
 // ─── Notifications ───────────────────────────────────────────
 router.post('/notifications', guard, c.sendNotificationToClient)
 
+// ─── SMS ──────────────────────────────────────────────────────
+router.get ('/sms/templates',  guard, c.getSmsTemplates)
+router.get ('/sms/recipients', guard, c.getSmsRecipients)
+router.post('/sms/send',       guard, c.sendAdminSms)
+router.get ('/sms/logs',       guard, c.getSmsLogs)
+
 // ─── Products ────────────────────────────────────────────────
 router.get   ('/products',     guard, c.getProducts)
 router.post  ('/products',     guard, c.createProduct)

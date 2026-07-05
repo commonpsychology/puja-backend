@@ -289,7 +289,6 @@ async function setAppointmentStatus(req, res, next) {
 
 // ─────────────────────────────────────────────────────────────
 // ORDERS
-// ─────────────────────────────────────────────────────────────
 async function getAllOrders(req, res, next) {
   try {
     const { status, delivery_status, page = 1, limit = 20 } = req.query
@@ -301,6 +300,7 @@ async function getAllOrders(req, res, next) {
         id, order_number, status, subtotal, total_amount,
         discount_amount, tax_amount, coupon_code, notes, created_at,
         delivery_status, delivery_rider_id,
+        shipping_address,
         clients:profiles!orders_client_id_fkey ( id, full_name, email ),
         delivery_riders (
           id, area, vehicle_type,

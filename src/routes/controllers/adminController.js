@@ -294,7 +294,7 @@ async function getAllOrders(req, res, next) {
     const { status, delivery_status, page = 1, limit = 20 } = req.query
     const offset = (Number(page) - 1) * Number(limit)
 
-    let query = supabase
+   let query = supabase
       .from('orders')
       .select(`
         id, order_number, status, subtotal, total_amount,

@@ -5,7 +5,6 @@ const bcrypt   = require('bcryptjs')
 const supabase = require('../../db/supabase')
 const { getAllPaymentsAdmin } = require('./paymentController')
 const { sendSms: sendSparrowSms } = require('../services/sparrowSms')
-const { sendNotificationEmail } = require('../services/mailer')// ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
@@ -403,18 +402,7 @@ async function sendNotificationToClient(req, res, next) {
       .select().single()
     if (error) throw error
 
-    // Look up the client's email and send them a real email too — non-blocking
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('email, full_name')
-      .eq('id', userId)
-      .maybeSingle()
 
-    if (profile?.email) {
-      sendNotificationEmail({ to: profile.email, title, message }).catch(err =>
-        console.error('[sendNotificationToClient] email failed for', profile.email, err.message)
-      )
-    }
 
     return res.status(201).json({ success: true, notification: data })
   } catch (err) { next(err) }

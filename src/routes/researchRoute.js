@@ -11,19 +11,8 @@ router.get('/',       ctrl.getPapers)
 router.get('/types',  ctrl.getTypes)   // static BEFORE /:id
 router.get('/stats',  ctrl.getStats)   // static BEFORE /:id
 
-
 // POST /api/research/:id/download  ← MUST be before /:id GET
-router.post('/:id/download', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { data: newDownloads, error } = await supabase
-      .rpc('increment_research_downloads', { research_id: id })
-    if (error) throw error
-    res.json({ ok: true, downloads: newDownloads })
-  } catch (e) {
-    res.status(500).json({ ok: false, message: e.message })
-  }
-})
+router.post('/:id/download', ctrl.trackDownload)
 
 router.get('/:id', ctrl.getPaperById)
 

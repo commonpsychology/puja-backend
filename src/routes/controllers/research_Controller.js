@@ -84,10 +84,14 @@ const trackDownload = async (req, res) => {
   try {
     const { data: newDownloads, error } = await supabase
       .rpc('increment_research_downloads', { research_id: req.params.id })
-    if (error) throw error
-    res.json({ success: true, downloads: newDownloads })
+    if (error) {
+      console.error('increment_research_downloads RPC failed:', error.message, error.details, error.hint)
+      throw error
+    }
+    const downloads = typeof newDownloads === 'string' ? parseInt(newDownloads, 10) : newDownloads
+    res.json({ ok: true, success: true, downloads })
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message })
+    res.status(500).json({ ok: false, success: false, message: err.message })
   }
 }
 

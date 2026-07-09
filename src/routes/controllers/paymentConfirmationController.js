@@ -73,6 +73,40 @@ async function validateCoupon(req, res, next) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Loyalty discount: every 10th completed payment unlocks 20% off the NEXT one
+// (i.e. after 10, 20, 30... completed payments → the 11th, 21st, 31st... gets 20% off)
+// ─────────────────────────────────────────────────────────────────────────────
+async function getClientLoyaltyStatus(userId) {
+  const { count, error } = await supabase
+    .from('payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', userId)
+    .eq('status', 'completed')
+
+  if (error) throw error
+
+  const completedCount        = count || 0
+  const upcomingPaymentNumber = completedCount + 1
+  const isEligible             = completedCount > 0 && completedCount % 10 === 0
+
+  return { completedCount, upcomingPaymentNumber, isEligible }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/payments/loyalty-status
+// Lets the frontend preview the discount before the client confirms payment.
+// ─────────────────────────────────────────────────────────────────────────────
+async function getLoyaltyStatus(req, res, next) {
+  try {
+    const userId = getUserId(req)
+    if (!userId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
+
+    const status = await getClientLoyaltyStatus(userId)
+    return res.status(200).json({ success: true, ...status })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payments/initiate  &  POST /api/payments
 // ─────────────────────────────────────────────────────────────────────────────
 async function initiatePayment(req, res, next) {
@@ -138,12 +172,25 @@ async function initiatePayment(req, res, next) {
           alreadyClaimed: true,
         })
 
-      discountAmount = coupon.type === 'percentage'
+   discountAmount = coupon.type === 'percentage'
         ? Math.round(Number(amount) * coupon.value / 100)
         : Number(coupon.value)
 
       finalAmount = Math.max(0, Math.round(Number(amount)) - discountAmount)
       couponId    = coupon.id
+    }
+
+    // ── Loyalty discount (applies AFTER coupon, on the remaining amount) ──
+    let loyaltyApplied        = false
+    let loyaltyDiscountAmount = 0
+    let loyaltyPaymentNumber  = null
+
+    const loyalty = await getClientLoyaltyStatus(userId)
+    if (loyalty.isEligible) {
+      loyaltyDiscountAmount = Math.round(finalAmount * 0.20)
+      finalAmount           = Math.max(0, finalAmount - loyaltyDiscountAmount)
+      loyaltyApplied        = true
+      loyaltyPaymentNumber  = loyalty.upcomingPaymentNumber
     }
 
     const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
@@ -157,10 +204,15 @@ async function initiatePayment(req, res, next) {
     if (courseId)      metadata.course_id      = courseId
     if (referenceCode) metadata.reference_code = referenceCode
     if (notes)         metadata.notes          = notes
-    if (discountAmount > 0) {
+if (discountAmount > 0) {
       metadata.original_amount = Math.round(Number(amount))
       metadata.discount_amount = discountAmount
       metadata.coupon_code     = rawCode
+    }
+    if (loyaltyApplied) {
+      metadata.loyalty_discount_applied = true
+      metadata.loyalty_discount_amount  = loyaltyDiscountAmount
+      metadata.loyalty_payment_number   = loyaltyPaymentNumber
     }
 
     const insertPayload = {
@@ -188,11 +240,21 @@ async function initiatePayment(req, res, next) {
     // ✅ FIX: use apptId (normalized), not the raw appointmentId variable.
     // This is the line that was silently no-op'ing whenever the caller sent
     // snake_case appointment_id.
-    if (apptId) {
+if (apptId) {
       await supabase.from('appointments')
         .update({ payment_status: 'pending' })
         .eq('id', apptId)
         .eq('payment_status', 'unpaid')
+    }
+
+    // Notify client specifically about the loyalty reward
+    if (loyaltyApplied) {
+      await sendNotification(userId, {
+        title:   '🎉 Loyalty Reward Unlocked!',
+        message: `This is your ${loyaltyPaymentNumber}th payment with us — enjoy 20% off (NPR ${loyaltyDiscountAmount.toLocaleString()} saved)!`,
+        type:    'payment',
+        link:    '/portal',
+      })
     }
 
     // Notify admin of new pending payment (QR / digital wallet)
@@ -202,7 +264,7 @@ async function initiatePayment(req, res, next) {
       for (const admin of (adminProfiles.data || [])) {
         await sendNotification(admin.id, {
           title:   `New pending payment — NPR ${Number(finalAmount).toLocaleString()}`,
-          message: `Method: ${method}. Txn: ${transactionId || 'not provided'}.${rawCode ? ` Coupon: ${rawCode}.` : ''}`,
+          message: `Method: ${method}. Txn: ${transactionId || 'not provided'}.${rawCode ? ` Coupon: ${rawCode}.` : ''}${loyaltyApplied ? ` Loyalty 20% applied (payment #${loyaltyPaymentNumber}).` : ''}`,
           type:    'payment',
           link:    '/staff/admin?tab=payments',
         })
@@ -216,8 +278,14 @@ async function initiatePayment(req, res, next) {
         couponApplied: true,
         discountAmount,
         originalAmount: Math.round(Number(amount)),
-        finalAmount,
       }),
+      ...(loyaltyApplied && {
+        loyaltyDiscountApplied: true,
+        loyaltyDiscountAmount,
+        loyaltyPaymentNumber,
+        loyaltyMessage: `🎉 This is your ${loyaltyPaymentNumber}th payment — 20% loyalty discount applied!`,
+      }),
+      finalAmount,
     })
   } catch (err) { next(err) }
 }
@@ -706,11 +774,11 @@ async function updatePaymentStatus(req, res, next) {
     return res.status(200).json({ success: true, payment: updated })
   } catch (err) { next(err) }
 }
-
 module.exports = {
   initiatePayment,
   verifyPayment,
   validateCoupon,
+  getLoyaltyStatus,
   approvePayment,
   rejectPayment,
   updatePaymentStatus,

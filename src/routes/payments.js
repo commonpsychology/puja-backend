@@ -5,6 +5,7 @@ const {
   initiatePayment,
   verifyPayment,
   validateCoupon,
+  getLoyaltyStatus,
   getMyPayments,
   getMyOrders,
   getPaymentById,
@@ -37,6 +38,9 @@ router.post('/admin/:id/cod-flag',    adminOnly, flagCOD)
 
 // Coupon validation (used by PaymentModal before confirming)
 router.post('/coupons/validate', validateCoupon)
+
+// Loyalty discount preview (used by PaymentModal/PaymentPage before confirming)
+router.get('/loyalty-status', getLoyaltyStatus)
 
 // Client routes
 router.post('/initiate',  initiatePayment)

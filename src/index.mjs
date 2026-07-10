@@ -17,6 +17,7 @@ const __dirname  = path.dirname(__filename)
 
 const errorHandler        = require('./middleware/errorHandler')
 const volunteerRoutes     = require('./routes/volunteerRoutes')
+const { startExpireHoldsJob } = require('./jobs/expireHolds')
 const authRoutes          = require('./routes/auth')
 const profileRoutes       = require('./routes/profile')
 const passwordRoutes      = require('./routes/password')
@@ -52,8 +53,8 @@ const dreamsRouter        = require('./routes/dreamsRoute')
 const patientsRoute        = require('./routes/patient')
 const deliveryRoutes      = require('./routes/deliveryRoutes')
 const esewaRouter         = require('./routes/esewa')
-  const donationRoutes = require('./routes/donationRoutes');
-
+const donationRoutes = require('./routes/donationRoutes');
+const internalRoutes = require('./routes/internal')
 
 const app  = express()
 const PORT = process.env.PORT || 5000
@@ -166,7 +167,8 @@ app.use('/api/admin',                adminRoutes)
 app.use('/api/store',                storeRoutes)
 app.use('/api/wellness',             wellnessRoutes)
 app.use('/api/social-work-programs', socialWorkRoutes)
-  app.use('/api/donations', donationRoutes);
+app.use('/api/donations',            donationRoutes)
+app.use('/api/internal',             internalRoutes)
 
 app.get('/api/mood', (_req, res) => res.json({ success: true, moods: [] }))
 
@@ -183,6 +185,7 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`   Mode   : ${process.env.NODE_ENV || 'development'}`)
     console.log(`   Health : http://localhost:${PORT}/health\n`)
   })
+  startExpireHoldsJob()
 }
 
 export default app

@@ -185,14 +185,13 @@ async function initiatePayment(req, res, next) {
     let loyaltyDiscountAmount = 0
     let loyaltyPaymentNumber  = null
 
-    const loyalty = await getClientLoyaltyStatus(userId)
+ const loyalty = await getClientLoyaltyStatus(userId)
     if (loyalty.isEligible) {
-      loyaltyDiscountAmount = Math.round(finalAmount * 0.20)
+      loyaltyDiscountAmount = Math.round(finalAmount * 0.50)
       finalAmount           = Math.max(0, finalAmount - loyaltyDiscountAmount)
       loyaltyApplied        = true
       loyaltyPaymentNumber  = loyalty.upcomingPaymentNumber
     }
-
     const category = apptId ? 'appointment' : orderIdN ? 'order' : 'other'
 
     const initialStatus = method === 'cash' || method === 'cod'
@@ -247,11 +246,10 @@ if (apptId) {
         .eq('payment_status', 'unpaid')
     }
 
-    // Notify client specifically about the loyalty reward
-    if (loyaltyApplied) {
+if (loyaltyApplied) {
       await sendNotification(userId, {
         title:   '🎉 Loyalty Reward Unlocked!',
-        message: `This is your ${loyaltyPaymentNumber}th payment with us — enjoy 20% off (NPR ${loyaltyDiscountAmount.toLocaleString()} saved)!`,
+        message: `This is your ${loyaltyPaymentNumber}th payment with us — enjoy 50% off (NPR ${loyaltyDiscountAmount.toLocaleString()} saved)!`,
         type:    'payment',
         link:    '/portal',
       })
@@ -264,8 +262,7 @@ if (apptId) {
       for (const admin of (adminProfiles.data || [])) {
         await sendNotification(admin.id, {
           title:   `New pending payment — NPR ${Number(finalAmount).toLocaleString()}`,
-          message: `Method: ${method}. Txn: ${transactionId || 'not provided'}.${rawCode ? ` Coupon: ${rawCode}.` : ''}${loyaltyApplied ? ` Loyalty 20% applied (payment #${loyaltyPaymentNumber}).` : ''}`,
-          type:    'payment',
+message: `Method: ${method}. Txn: ${transactionId || 'not provided'}.${rawCode ? ` Coupon: ${rawCode}.` : ''}${loyaltyApplied ? ` Loyalty 50% applied (payment #${loyaltyPaymentNumber}).` : ''}`,          type:    'payment',
           link:    '/staff/admin?tab=payments',
         })
       }
@@ -283,8 +280,7 @@ if (apptId) {
         loyaltyDiscountApplied: true,
         loyaltyDiscountAmount,
         loyaltyPaymentNumber,
-        loyaltyMessage: `🎉 This is your ${loyaltyPaymentNumber}th payment — 20% loyalty discount applied!`,
-      }),
+loyaltyMessage: `🎉 This is your ${loyaltyPaymentNumber}th payment — 50% loyalty discount applied!`,      }),
       finalAmount,
     })
   } catch (err) { next(err) }

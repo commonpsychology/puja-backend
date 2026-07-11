@@ -9,7 +9,8 @@ const {
   rescheduleAppointment,
   getBookedSlots,
   getMySlots,
-  canBookSlot
+  canBookSlot,
+  attachPayment
 } = require('./controllers/appointmentController')
 
 const router = express.Router()
@@ -30,5 +31,5 @@ router.get('/:id', getAppointment)
 
 router.patch('/:id/cancel', cancelAppointment)
 router.patch('/:id/reschedule', rescheduleAppointment)
-
+router.post('/:id/attach-payment', attachPayment)
 module.exports = router

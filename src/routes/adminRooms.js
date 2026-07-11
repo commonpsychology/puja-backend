@@ -1,9 +1,6 @@
-// src/routes/adminRooms.js
-// Mounted in index.mjs as: app.use('/api/admin/rooms', adminRoomsRoutes)
-
 const express = require('express')
 const router  = express.Router()
-const { authenticate, requireRole } = require('../middleware/auth')
+const { authenticate, requireRole } = require('../middleware/auth') // ⚠️ same check as above
 
 const {
   adminListRooms,
@@ -14,9 +11,9 @@ const {
 
 router.use(authenticate, requireRole(['admin', 'staff']))
 
-router.get   ('/',      adminListRooms)
-router.post  ('/',      adminCreateRoom)
-router.put   ('/:id',    adminUpdateRoom)
-router.delete('/:id',    adminDeleteRoom)
+router.get   ('/',     adminListRooms)
+router.post  ('/',     adminCreateRoom)
+router.put   ('/:id',  adminUpdateRoom)
+router.delete('/:id',  adminDeleteRoom)
 
 module.exports = router

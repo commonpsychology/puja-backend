@@ -18,6 +18,27 @@ function isOneBookingPerDayError(err) {
   )
 }
 
+// ============================================================
+// 🟢 EXPIRE STALE UNPAID ROOM HOLDS
+// Mirrors expireStaleHolds() in appointmentController.js — cancels any
+// room_booking still 'pending' after HOLD_MINUTES, freeing the slot.
+// ============================================================
+const ROOM_HOLD_MINUTES = 30
+
+async function expireStaleRoomHolds() {
+  const cutoff = new Date(Date.now() - ROOM_HOLD_MINUTES * 60 * 1000).toISOString()
+  try {
+    await supabase
+      .from('room_bookings')
+      .update({ status: 'cancelled', payment_status: 'failed' })
+      .eq('status', 'pending')
+      .eq('payment_status', 'pending')
+      .lt('created_at', cutoff)
+  } catch (e) {
+    console.error('expireStaleRoomHolds error:', e.message)
+  }
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function sendNotification(userId, { title, message, type = 'system', link = null }) {
@@ -81,6 +102,7 @@ async function getRoom(req, res, next) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function checkAvailability(req, res, next) {
   try {
+    await expireStaleRoomHolds()
     const { roomId, date } = req.query
 
     if (!roomId || !date) {
@@ -119,8 +141,8 @@ async function createRoomBooking(req, res, next) {
     const clientId = getUserId(req)
     if (!clientId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
-    const { roomId, bookedDate, startTime, endTime, notes, paymentMethod } = req.body
-
+await expireStaleRoomHolds()
+    const { roomId, bookedDate, startTime, endTime, notes, paymentMethod, amount } = req.body
     // ── Validate required fields ────────────────────────────
     if (!roomId || !bookedDate || !startTime || !endTime) {
       return res.status(400).json({
@@ -181,11 +203,18 @@ async function createRoomBooking(req, res, next) {
       })
     }
 
-    // ── Calculate total amount ──────────────────────────────
+// ── Calculate total amount ──────────────────────────────
+    // Prefer the amount actually charged (the package price set on
+    // OurplacePage) over the hourly-rate fallback — these two only match
+    // by coincidence otherwise, which is what caused wrong amounts in
+    // the admin Room Bookings tab.
     const [sh, sm] = startTime.split(':').map(Number)
     const [eh, em] = endTime.split(':').map(Number)
     const durationHours = ((eh * 60 + em) - (sh * 60 + sm)) / 60
-    const totalAmount = Math.round(durationHours * Number(room.price_per_hour) * 100) / 100
+    const computedAmount = Math.round(durationHours * Number(room.price_per_hour) * 100) / 100
+    const totalAmount = (amount != null && !isNaN(Number(amount)))
+      ? Number(amount)
+      : computedAmount
 
     // ── Insert booking ──────────────────────────────────────
     const { data: booking, error: insertErr } = await supabase
@@ -676,6 +705,7 @@ module.exports = {
   listRooms,
   getRoom,
   checkAvailability,
+  expireStaleRoomHolds,
   // Client (authenticated)
   createRoomBooking,
   listMyBookings,

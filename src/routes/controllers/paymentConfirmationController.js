@@ -367,10 +367,15 @@ async function rejectPayment(req, res, next) {
       .from('payments').update(updatePayload).eq('id', id).select().single()
     if (updateErr) throw updateErr
 
-    if (payment.appointment_id) {
+  if (payment.appointment_id) {
       await supabase.from('appointments')
-        .update({ payment_status: 'unpaid' })
+        .update({ status: 'cancelled', payment_status: 'unpaid' })
         .eq('id', payment.appointment_id)
+    }
+    if (payment.room_booking_id) {
+      await supabase.from('room_bookings')
+        .update({ status: 'cancelled', payment_status: 'failed' })
+        .eq('id', payment.room_booking_id)
     }
     if (payment.coupon_id) {
       await supabase.from('coupons')
@@ -476,10 +481,15 @@ async function flagCOD(req, res, next) {
 
     // ✅ FIX: flagCOD previously left the appointment stuck at
     // payment_status:'pending' forever. Now it resets like rejectPayment does.
-    if (payment.appointment_id) {
+if (payment.appointment_id) {
       await supabase.from('appointments')
-        .update({ payment_status: 'unpaid' })
+        .update({ status: 'cancelled', payment_status: 'unpaid' })
         .eq('id', payment.appointment_id)
+    }
+    if (payment.room_booking_id) {
+      await supabase.from('room_bookings')
+        .update({ status: 'cancelled', payment_status: 'failed' })
+        .eq('id', payment.room_booking_id)
     }
 
     if (payment.order_id) {

@@ -378,15 +378,58 @@ async function updatePaymentStatus(req, res, next) {
     const valid = ['pending', 'pending_cod', 'completed', 'failed', 'refunded']
     if (!valid.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' })
 
+    // Fetch first — need appointment_id / room_booking_id / coupon_id to cascade.
+    const { data: existing, error: fetchErr } = await supabase
+      .from('payments').select('*').eq('id', req.params.id).single()
+    if (fetchErr || !existing) return res.status(404).json({ success: false, message: 'Payment not found.' })
+
     const updateData = { status }
     if (status === 'completed') updateData.paid_at = new Date().toISOString()
 
     const { data, error } = await supabase.from('payments').update(updateData).eq('id', req.params.id).select().single()
     if (error) throw error
+
+    // ── Cascade: keep the linked appointment/room booking in sync ──
+    // Without this, rejecting/refunding a payment leaves the booking stuck
+    // at status:'pending' forever, permanently locking that date+time even
+    // though no money ever cleared for it. Confirming must flip the booking
+    // to confirmed too, not just the payment row.
+    if (existing.appointment_id) {
+      if (status === 'completed') {
+        await supabase.from('appointments')
+          .update({ status: 'confirmed', payment_status: 'paid' })
+          .eq('id', existing.appointment_id)
+          .eq('status', 'pending')
+      } else if (status === 'failed' || status === 'refunded') {
+        await supabase.from('appointments')
+          .update({ status: 'cancelled', payment_status: status === 'refunded' ? 'refunded' : 'failed' })
+          .eq('id', existing.appointment_id)
+      }
+    }
+
+    if (existing.room_booking_id) {
+      if (status === 'completed') {
+        await supabase.from('room_bookings')
+          .update({ status: 'confirmed', payment_status: 'paid' })
+          .eq('id', existing.room_booking_id)
+          .eq('status', 'pending')
+      } else if (status === 'failed' || status === 'refunded') {
+        await supabase.from('room_bookings')
+          .update({ status: 'cancelled', payment_status: status === 'refunded' ? 'refunded' : 'failed' })
+          .eq('id', existing.room_booking_id)
+      }
+    }
+
+    // Release any coupon this payment claimed, so it can be reused
+    if ((status === 'failed' || status === 'refunded') && existing.coupon_id) {
+      await supabase.from('coupons')
+        .update({ used_by: null, used_at: null })
+        .eq('id', existing.coupon_id)
+    }
+
     return res.status(200).json({ success: true, payment: data })
   } catch (err) { next(err) }
 }
-
 // ─────────────────────────────────────────────────────────────
 // NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────

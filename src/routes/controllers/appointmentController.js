@@ -6,6 +6,59 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+// Kathmandu is UTC+5:45 — must match the `Asia/Kathmandu` timezone used in
+// the `scheduled_date` generated column / DB trigger, or the app-level
+// pre-check and the DB-level trigger could disagree on which calendar day a
+// slot falls on near midnight.
+const KATHMANDU_OFFSET_MIN = 5 * 60 + 45
+
+function kathmanduDateFromISO(iso) {
+  const d = new Date(iso)
+  const shifted = new Date(d.getTime() + KATHMANDU_OFFSET_MIN * 60000)
+  return shifted.toISOString().split('T')[0] // YYYY-MM-DD
+}
+
+// Friendly message when the DB trigger rejects an insert/update because the
+// client already has a booking (appointment OR room) that day.
+function isOneBookingPerDayError(err) {
+  return !!err && (
+    err.code === 'P0001' ||
+    (typeof err.message === 'string' && err.message.includes('ONE_BOOKING_PER_DAY'))
+  )
+}
+
+// ============================================================
+// 🟢 ONE BOOKING (appointment OR room) PER CLIENT PER DAY — pre-check
+// Cheap up-front check so the user gets a clean 409 instead of a raw
+// Postgres trigger exception. The DB trigger (see supabase_migrations.sql)
+// is the real source of truth / race-condition guard.
+// ============================================================
+const clientHasBookingOnDate = async (clientId, dateStr, { excludeAppointmentId } = {}) => {
+  const [{ data: appts }, { data: rooms }] = await Promise.all([
+    supabase
+      .from('appointments')
+      .select('id')
+      .eq('client_id', clientId)
+      .neq('status', 'cancelled')
+      .eq('scheduled_date', dateStr) // generated column, see migration
+      .then(r => ({ data: r.data || [] })),
+    supabase
+      .from('room_bookings')
+      .select('id')
+      .eq('client_id', clientId)
+      .neq('status', 'cancelled')
+      .eq('booked_date', dateStr)
+      .then(r => ({ data: r.data || [] })),
+  ])
+
+  const applicableAppts = excludeAppointmentId
+    ? appts.filter(a => a.id !== excludeAppointmentId)
+    : appts
+
+  return (applicableAppts.length > 0) || (rooms.length > 0)
+}
+
+
 // ============================================================
 // 🟢 BOOK APPOINTMENT (SAFE)
 // ============================================================
@@ -42,6 +95,10 @@ const bookAppointment = async (req, res) => {
     }
 
     // 2. Therapist conflict check
+    // ⚠️ Intentionally NOT filtered by `type`. This is what makes booking one
+    // mode (call/video/in-person) lock the ENTIRE slot for every mode — the
+    // unique index behind this (idx_appt_therapist_time_unique) is also keyed
+    // only on (therapist_id, scheduled_at), not type. Do not add `type` here.
     const { data: conflict1 } = await supabase
       .from('appointments')
       .select('id')
@@ -57,7 +114,7 @@ const bookAppointment = async (req, res) => {
       })
     }
 
-    // 3. Client conflict check
+    // 3. Client conflict check (same exact timestamp)
     const { data: conflict2 } = await supabase
       .from('appointments')
       .select('id')
@@ -73,7 +130,18 @@ const bookAppointment = async (req, res) => {
       })
     }
 
-    // 4. Insert booking
+    // 4. One booking (appointment OR room) per client per day
+    const targetDate = kathmanduDateFromISO(scheduledAt)
+    const alreadyBookedToday = await clientHasBookingOnDate(clientId, targetDate)
+    if (alreadyBookedToday) {
+      return res.status(409).json({
+        success: false,
+        code: 'ONE_BOOKING_PER_DAY',
+        message: 'You can only have one appointment or room booking per day. You already have a booking on this date.'
+      })
+    }
+
+    // 5. Insert booking
     const { data: appointment, error } = await supabase
       .from('appointments')
       .insert({
@@ -90,11 +158,18 @@ const bookAppointment = async (req, res) => {
       .single()
 
     if (error) {
-      // 🔴 Handle race condition
+      // 🔴 Handle race conditions
       if (error.code === '23505') {
         return res.status(409).json({
           success: false,
           message: 'This slot was just taken. Try another.'
+        })
+      }
+      if (isOneBookingPerDayError(error)) {
+        return res.status(409).json({
+          success: false,
+          code: 'ONE_BOOKING_PER_DAY',
+          message: 'You can only have one appointment or room booking per day. You already have a booking on this date.'
         })
       }
       throw error
@@ -107,6 +182,13 @@ const bookAppointment = async (req, res) => {
     })
 
   } catch (err) {
+    if (isOneBookingPerDayError(err)) {
+      return res.status(409).json({
+        success: false,
+        code: 'ONE_BOOKING_PER_DAY',
+        message: 'You can only have one appointment or room booking per day. You already have a booking on this date.'
+      })
+    }
     return res.status(500).json({
       success: false,
       message: err.message
@@ -117,6 +199,10 @@ const bookAppointment = async (req, res) => {
 
 // ============================================================
 // 🟢 GET BOOKED SLOTS (THERAPIST)
+// Returned regardless of `type` — the frontend must NOT filter these by the
+// session type the visitor currently has selected, otherwise a slot booked
+// as "video call" would incorrectly show as free for "in-person". These are
+// the slots that are booked, full stop.
 // ============================================================
 const getBookedSlots = async (req, res) => {
   const { therapistId, date } = req.query
@@ -195,6 +281,30 @@ const getMySlots = async (req, res) => {
 
 
 // ============================================================
+// 🟢 CHECK-DAY — has this client already booked anything today?
+// Lets the frontend disable a date up front (before picking a time) instead
+// of only failing at final submit. Mount as GET /appointments/check-day?date=
+// if you want it on this router too (also provided as a combined endpoint
+// in sharedBookingController.js covering both appointments + rooms).
+// ============================================================
+const checkDayAvailability = async (req, res) => {
+  const { date } = req.query
+  const clientId = req.user.sub
+
+  if (!date) {
+    return res.status(400).json({ message: 'date is required' })
+  }
+
+  try {
+    const hasBooking = await clientHasBookingOnDate(clientId, date)
+    return res.json({ hasBooking })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+}
+
+
+// ============================================================
 // 🟢 EXISTING FUNCTIONS (UNCHANGED BUT SAFE)
 // ============================================================
 
@@ -241,6 +351,13 @@ const getAppointment = async (req, res) => {
 }
 
 
+// Cancelling sets status = 'cancelled', which:
+//   • drops out of idx_appt_therapist_time_unique → frees the slot for
+//     the therapist (any mode) immediately
+//   • drops out of idx_appt_client_time_unique → frees the client too
+//   • drops out of the one-booking-per-day check (trigger explicitly
+//     early-returns when NEW.status = 'cancelled') → client can book
+//     something else that same day right away
 const cancelAppointment = async (req, res) => {
   try {
     // Fetch first so we know whether this was a paid booking or an abandoned hold.
@@ -282,16 +399,70 @@ const cancelAppointment = async (req, res) => {
 
 const rescheduleAppointment = async (req, res) => {
   const { scheduledAt } = req.body
+  const clientId = req.user.sub
 
-  const { data } = await supabase
-    .from('appointments')
-    .update({ scheduled_at: scheduledAt })
-    .eq('id', req.params.id)
-    .eq('client_id', req.user.sub)
-    .select()
-    .single()
+  try {
+    // Rescheduling is really "cancel this slot, take a new one" — so it must
+    // go through the same day-limit + conflict checks as a fresh booking,
+    // otherwise a client could dodge the one-per-day rule by rescheduling.
+    const { data: existing } = await supabase
+      .from('appointments')
+      .select('id, therapist_id')
+      .eq('id', req.params.id)
+      .eq('client_id', clientId)
+      .maybeSingle()
 
-  return res.json({ success: true, appointment: data })
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Appointment not found.' })
+    }
+
+    const { data: conflict } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('therapist_id', existing.therapist_id)
+      .eq('scheduled_at', scheduledAt)
+      .neq('status', 'cancelled')
+      .maybeSingle()
+
+    if (conflict) {
+      return res.status(409).json({ success: false, message: 'That new time is already booked.' })
+    }
+
+    const targetDate = kathmanduDateFromISO(scheduledAt)
+    const alreadyBookedToday = await clientHasBookingOnDate(clientId, targetDate, {
+      excludeAppointmentId: existing.id,
+    })
+    if (alreadyBookedToday) {
+      return res.status(409).json({
+        success: false,
+        code: 'ONE_BOOKING_PER_DAY',
+        message: 'You can only have one appointment or room booking per day.'
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('appointments')
+      .update({ scheduled_at: scheduledAt })
+      .eq('id', req.params.id)
+      .eq('client_id', clientId)
+      .select()
+      .single()
+
+    if (error) {
+      if (isOneBookingPerDayError(error)) {
+        return res.status(409).json({
+          success: false,
+          code: 'ONE_BOOKING_PER_DAY',
+          message: 'You can only have one appointment or room booking per day.'
+        })
+      }
+      throw error
+    }
+
+    return res.json({ success: true, appointment: data })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
 }
 
 
@@ -331,5 +502,8 @@ module.exports = {
   rescheduleAppointment,
   getBookedSlots,
   getMySlots,
-  expireStaleHolds
+  checkDayAvailability,
+  expireStaleHolds,
+  clientHasBookingOnDate,
+  kathmanduDateFromISO,
 }

@@ -5,8 +5,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const supabase = require('../../db/supabase')
+const { clientHasBookingOnDate } = require('./appointmentController')
+// ↑ same folder as this file (src/routes/controllers/) — adjust only if yours
+//   lives somewhere else.
 
 const getUserId = (req) => req.user?.sub || req.user?.id
+
+function isOneBookingPerDayError(err) {
+  return !!err && (
+    err.code === 'P0001' ||
+    (typeof err.message === 'string' && err.message.includes('ONE_BOOKING_PER_DAY'))
+  )
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -154,10 +164,20 @@ async function createRoomBooking(req, res, next) {
       return b.start_time < endTime && b.end_time > startTime
     })
 
-    if (hasConflict) {
+ if (hasConflict) {
       return res.status(409).json({
         success: false,
         message: 'This room is already booked for part of that time. Please choose a different slot.',
+      })
+    }
+
+    // ── One booking (appointment OR room) per client per day ──
+    const alreadyBookedToday = await clientHasBookingOnDate(clientId, bookedDate)
+    if (alreadyBookedToday) {
+      return res.status(409).json({
+        success: false,
+        code: 'ONE_BOOKING_PER_DAY',
+        message: 'You can only have one appointment or room booking per day. You already have a booking on this date.',
       })
     }
 
@@ -188,12 +208,19 @@ async function createRoomBooking(req, res, next) {
       `)
       .single()
 
-    if (insertErr) {
+  if (insertErr) {
       // Race condition / overlap caught by DB constraint
       if (insertErr.code === '23P01' || insertErr.code === '23505') {
         return res.status(409).json({
           success: false,
           message: 'This slot was just taken. Please choose a different time.',
+        })
+      }
+      if (isOneBookingPerDayError(insertErr)) {
+        return res.status(409).json({
+          success: false,
+          code: 'ONE_BOOKING_PER_DAY',
+          message: 'You can only have one appointment or room booking per day.',
         })
       }
       throw insertErr
@@ -214,7 +241,7 @@ async function createRoomBooking(req, res, next) {
       })
     }
 
-    return res.status(201).json({
+return res.status(201).json({
       success: true,
       message: 'Room booked successfully. Please complete payment to confirm.',
       booking,
@@ -224,7 +251,16 @@ async function createRoomBooking(req, res, next) {
         bookingId: booking.id,
       },
     })
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (isOneBookingPerDayError(err)) {
+      return res.status(409).json({
+        success: false,
+        code: 'ONE_BOOKING_PER_DAY',
+        message: 'You can only have one appointment or room booking per day.',
+      })
+    }
+    next(err)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -8,7 +8,8 @@ const {
   cancelAppointment,
   rescheduleAppointment,
   getBookedSlots,
-  getMySlots
+  getMySlots,
+  canBookSlot
 } = require('./controllers/appointmentController')
 
 const router = express.Router()
@@ -20,7 +21,7 @@ router.get('/booked-slots', getBookedSlots)
 router.use(authenticate)
 
 router.get('/my-slots', getMySlots)
-
+router.get('/can-book', canBookSlot)
 router.post('/', bookAppointment)
 router.get('/', listMyAppointments)
 

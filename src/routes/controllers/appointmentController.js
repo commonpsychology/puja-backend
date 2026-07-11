@@ -305,6 +305,76 @@ const checkDayAvailability = async (req, res) => {
 
 
 // ============================================================
+// 🟢 PRECHECK — can this exact therapist+time+client be booked right now?
+// Called the moment the user picks a time in Step 3, before Confirm/Payment,
+// so conflicts surface immediately with a specific reason.
+// ============================================================
+const canBookSlot = async (req, res) => {
+  const { therapistId, scheduledAt } = req.query
+  const clientId = req.user.sub
+
+  if (!therapistId || !scheduledAt) {
+    return res.status(400).json({ ok: false, reason: 'missing_params', message: 'therapistId and scheduledAt are required.' })
+  }
+
+  try {
+    await expireStaleHolds()
+
+    const { data: therapist } = await supabase
+      .from('therapists')
+      .select('id, is_available')
+      .eq('id', therapistId)
+      .maybeSingle()
+
+    if (!therapist) {
+      return res.json({ ok: false, reason: 'therapist_not_found', message: 'Therapist not found.' })
+    }
+    if (!therapist.is_available) {
+      return res.json({ ok: false, reason: 'therapist_unavailable', message: 'This therapist is not accepting appointments.' })
+    }
+
+    const { data: slotTaken } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('therapist_id', therapistId)
+      .eq('scheduled_at', scheduledAt)
+      .neq('status', 'cancelled')
+      .maybeSingle()
+
+    if (slotTaken) {
+      return res.json({ ok: false, reason: 'slot_taken', message: 'This time slot is already booked.' })
+    }
+
+    const { data: clientSameTime } = await supabase
+      .from('appointments')
+      .select('id')
+      .eq('client_id', clientId)
+      .eq('scheduled_at', scheduledAt)
+      .neq('status', 'cancelled')
+      .maybeSingle()
+
+    if (clientSameTime) {
+      return res.json({ ok: false, reason: 'own_double_booking', message: 'You already have an appointment at this exact time.' })
+    }
+
+    const targetDate = kathmanduDateFromISO(scheduledAt)
+    const dayTaken = await clientHasBookingOnDate(clientId, targetDate)
+    if (dayTaken) {
+      return res.json({
+        ok: false,
+        reason: 'day_limit',
+        message: 'You already have a booking (appointment or room) on this day. Only one booking per day is allowed.'
+      })
+    }
+
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.status(500).json({ ok: false, reason: 'error', message: err.message })
+  }
+}
+
+
+// ============================================================
 // 🟢 EXISTING FUNCTIONS (UNCHANGED BUT SAFE)
 // ============================================================
 

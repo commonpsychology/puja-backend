@@ -563,6 +563,67 @@ const expireStaleHolds = async () => {
 
 
 // ============================================================
+// 🟢 ATTACH PAYMENT — links a completed/pending payment record to an
+// appointment after the payment gateway responds. Called by the frontend
+// right after openPayment() resolves.
+// ============================================================
+const attachPayment = async (req, res) => {
+  try {
+    const clientId = req.user.sub
+    const { paymentId, transactionId } = req.body
+
+    if (!paymentId) {
+      return res.status(400).json({ success: false, message: 'paymentId is required.' })
+    }
+
+    const { data: appointment, error: fetchErr } = await supabase
+      .from('appointments')
+      .select('id, client_id, status')
+      .eq('id', req.params.id)
+      .eq('client_id', clientId)
+      .maybeSingle()
+
+    if (fetchErr) throw fetchErr
+    if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found.' })
+    if (appointment.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'Cannot attach payment to a cancelled appointment.' })
+    }
+
+    const { data: payment, error: payErr } = await supabase
+      .from('payments')
+      .select('id, client_id, status, method')
+      .eq('id', paymentId)
+      .eq('client_id', clientId)
+      .maybeSingle()
+
+    if (payErr) throw payErr
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment not found.' })
+
+    const isCompleted = payment.status === 'completed'
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('appointments')
+      .update({
+        payment_status: isCompleted ? 'paid' : 'pending',
+        status:         isCompleted ? 'confirmed' : appointment.status,
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (updateErr) throw updateErr
+
+    await supabase
+      .from('payments')
+      .update({ appointment_id: req.params.id, category: 'appointment' })
+      .eq('id', paymentId)
+
+    return res.status(200).json({ success: true, appointment: updated })
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message })
+  }
+}
+
 module.exports = {
   bookAppointment,
   listMyAppointments,
@@ -572,6 +633,8 @@ module.exports = {
   getBookedSlots,
   getMySlots,
   checkDayAvailability,
+  canBookSlot,
+  attachPayment,
   expireStaleHolds,
   clientHasBookingOnDate,
   kathmanduDateFromISO,

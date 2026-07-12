@@ -123,7 +123,7 @@ app.use(rateLimit({
   legacyHeaders:   false,
   message: { success: false, message: 'Too many requests. Slow down.' },
 }))
-
+ 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
   status:    'ok',

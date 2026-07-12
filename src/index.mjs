@@ -131,7 +131,6 @@ app.get('/health', (_req, res) => res.json({
   version:   '2.1.0',
   timestamp: new Date().toISOString(),
 }))
-
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth',                 authRoutes)
 app.use('/api/profile',              profileRoutes)

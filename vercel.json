@@ -1,13 +1,9 @@
 {
   "version": 2,
   "builds": [{ "src": "src/index.mjs", "use": "@vercel/node" }],
-  "routes": [{ "src": "/(.*)", "dest": "src/index.mjs" }],
-    "crons": [
-    {
-      "path": "/api/internal/expire-holds",
-      "schedule": "0 * * * *"
-    }
-  ]
+  "routes": [{ "src": "/(.*)", "dest": "src/index.mjs" }]
+   
+  
 }
 
   

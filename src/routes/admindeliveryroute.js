@@ -1,9 +1,9 @@
 const express = require('express')
 const router = express.Router()
 const ctrl = require('./controllers/adminDeliveryRidersController')
-const { authenticate, requireAdmin } = require('../middleware/auth')
+const { authenticate, isAdmin } = require('../middleware/auth')
 
-router.use(authenticate, requireAdmin)
+router.use(authenticate, isAdmin)
 
 router.get('/', ctrl.list)
 router.post('/', ctrl.create)

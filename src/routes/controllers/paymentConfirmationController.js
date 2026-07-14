@@ -128,12 +128,33 @@ async function initiatePayment(req, res, next) {
     const apptId   = appointment_id || appointmentId || null
     const orderIdN = order_id       || orderId       || null
 
-    if (!amount || !method)
+    // ✅ FIX: for store orders, NEVER trust the client-submitted amount —
+    // always pull the authoritative total from the order row itself.
+    // This is what was causing store payment amounts to drift/mismatch
+    // in the admin panel (stale cart, sale-price race, rounding, etc.)
+    let amountToUse = amount
+    if (orderIdN) {
+      const { data: orderRow, error: orderFetchErr } = await supabase
+        .from('orders')
+        .select('total_amount, client_id')
+        .eq('id', orderIdN)
+        .single()
+
+      if (orderFetchErr || !orderRow)
+        return res.status(400).json({ success: false, message: 'Order not found.' })
+
+      if (orderRow.client_id !== userId)
+        return res.status(403).json({ success: false, message: 'This order does not belong to you.' })
+
+      amountToUse = orderRow.total_amount
+    }
+
+    if (!amountToUse || !method)
       return res.status(400).json({ success: false, message: 'amount and method are required.' })
 
     let couponId       = null
     let discountAmount = 0
-    let finalAmount    = Math.round(Number(amount))
+    let finalAmount    = Math.round(Number(amountToUse))
 
     // ── Coupon claiming (atomic) ──────────────────────────────────────────
     const rawCode = (coupon_code || couponCode || '').trim().toUpperCase()
@@ -173,10 +194,10 @@ async function initiatePayment(req, res, next) {
         })
 
    discountAmount = coupon.type === 'percentage'
-        ? Math.round(Number(amount) * coupon.value / 100)
+        ? Math.round(Number(amountToUse) * coupon.value / 100)
         : Number(coupon.value)
 
-      finalAmount = Math.max(0, Math.round(Number(amount)) - discountAmount)
+      finalAmount = Math.max(0, Math.round(Number(amountToUse)) - discountAmount)
       couponId    = coupon.id
     }
 
@@ -274,7 +295,7 @@ message: `Method: ${method}. Txn: ${transactionId || 'not provided'}.${rawCode ?
       ...(discountAmount > 0 && {
         couponApplied: true,
         discountAmount,
-        originalAmount: Math.round(Number(amount)),
+        originalAmount: Math.round(Number(amountToUse)),
       }),
       ...(loyaltyApplied && {
         loyaltyDiscountApplied: true,

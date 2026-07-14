@@ -1,4 +1,7 @@
-/* eslint-disable no-undef */
+// controllers/storeController.js
+// Uses Supabase client created with the SERVICE ROLE key (bypasses RLS).
+// Assumes an `authenticate` middleware sets req.user = { id, role }.
+
 const { createClient } = require('@supabase/supabase-js')
 
 const supabase = createClient(
@@ -6,295 +9,237 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-// ── Categories ────────────────────────────────────────────────
-const listCategories = async (req, res) => {
+// ---------- GET /api/store/categories ----------
+exports.getCategories = async (req, res) => {
   const { data, error } = await supabase
-    .from('categories')
-    .select('id, name, slug, description, image_url, parent_id, sort_order')
-    .eq('is_active', true)
-    .order('sort_order')
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not fetch categories.' })
-  return res.status(200).json({ success: true, categories: data })
+    .from('product_categories')
+    .select('*')
+    .order('sort_order', { ascending: true })
+  if (error) return res.status(500).json({ message: error.message })
+  res.json({ categories: data })
 }
 
-// ── Products ──────────────────────────────────────────────────
-const listProducts = async (req, res) => {
-  const { page = 1, limit = 12, category, featured, q } = req.query
-  const offset = (page - 1) * limit
+// ---------- GET /api/store/products ----------
+exports.getProducts = async (req, res) => {
+  try {
+    const page  = Math.max(1, Number(req.query.page) || 1)
+    const limit = Math.min(50, Number(req.query.limit) || 12)
+    const from  = (page - 1) * limit
+    const to    = from + limit - 1
 
-  let query = supabase
-    .from('products')
-    .select(
-      'id, name, slug, short_description, price, sale_price, images, is_featured, is_digital, tags, category_id, stock_quantity',
-      { count: 'exact' }
-    )
-    .eq('is_active', true)
-    .range(offset, offset + Number(limit) - 1)
-    .order('created_at', { ascending: false })
+    let query = supabase
+      .from('products')
+      .select('*', { count: 'exact' })
+      .eq('is_active', true)
 
-  if (category) query = query.eq('category_id', category)
-  if (featured) query = query.eq('is_featured', true)
-  if (q)        query = query.ilike('name', `%${q}%`)
-
-  const { data, error, count } = await query
-  if (error) return res.status(500).json({ success: false, message: 'Could not fetch products.' })
-
-  return res.status(200).json({
-    success: true,
-    products: data,
-    pagination: { page: Number(page), limit: Number(limit), total: count },
-  })
-}
-
-const getProduct = async (req, res) => {
-  const { id } = req.params
-  const { data, error } = await supabase
-    .from('products')
-    .select('*, product_variants(*), categories:category_id(name, slug)')
-    .eq('is_active', true)
-    .or(`id.eq.${id},slug.eq.${id}`)
-    .maybeSingle()
-
-  if (error || !data) return res.status(404).json({ success: false, message: 'Product not found.' })
-  return res.status(200).json({ success: true, product: data })
-}
-
-// ── Cart ──────────────────────────────────────────────────────
-const getCart = async (req, res) => {
-  const { data, error } = await supabase
-    .from('cart_items')
-    .select(`
-      id, quantity, added_at,
-      products:product_id ( id, name, price, sale_price, images, stock_quantity ),
-      product_variants:variant_id ( id, name, price )
-    `)
-    .eq('user_id', req.user.sub)
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not fetch cart.' })
-  return res.status(200).json({ success: true, cart: data })
-}
-
-const addToCart = async (req, res) => {
-  const { productId, variantId = null, quantity = 1 } = req.body
-  if (!productId) return res.status(400).json({ success: false, message: 'productId is required.' })
-
-  const { data: existing } = await supabase
-    .from('cart_items')
-    .select('id, quantity')
-    .eq('user_id', req.user.sub)
-    .eq('product_id', productId)
-    .eq('variant_id', variantId)
-    .maybeSingle()
-
-  if (existing) {
-    const { data, error } = await supabase
-      .from('cart_items')
-      .update({ quantity: existing.quantity + quantity })
-      .eq('id', existing.id)
-      .select()
-      .single()
-
-    if (error) return res.status(500).json({ success: false, message: 'Could not update cart.' })
-    return res.status(200).json({ success: true, message: 'Cart updated.', item: data })
-  }
-
-  const { data, error } = await supabase
-    .from('cart_items')
-    .insert({ user_id: req.user.sub, product_id: productId, variant_id: variantId, quantity })
-    .select()
-    .single()
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not add to cart.' })
-  return res.status(201).json({ success: true, message: 'Added to cart.', item: data })
-}
-
-const updateCartItem = async (req, res) => {
-  const { quantity } = req.body
-  if (!quantity || quantity < 1)
-    return res.status(400).json({ success: false, message: 'quantity must be at least 1.' })
-
-  const { data, error } = await supabase
-    .from('cart_items')
-    .update({ quantity })
-    .eq('user_id', req.user.sub)
-    .eq('product_id', req.params.productId)
-    .select()
-    .single()
-
-  if (error || !data) return res.status(404).json({ success: false, message: 'Cart item not found.' })
-  return res.status(200).json({ success: true, item: data })
-}
-
-const removeFromCart = async (req, res) => {
-  await supabase
-    .from('cart_items')
-    .delete()
-    .eq('user_id', req.user.sub)
-    .eq('product_id', req.params.productId)
-
-  return res.status(200).json({ success: true, message: 'Item removed from cart.' })
-}
-
-const clearCart = async (req, res) => {
-  await supabase.from('cart_items').delete().eq('user_id', req.user.sub)
-  return res.status(200).json({ success: true, message: 'Cart cleared.' })
-}
-
-// ── Wishlist ──────────────────────────────────────────────────
-const getWishlist = async (req, res) => {
-  const { data, error } = await supabase
-    .from('wishlists')
-    .select('products:product_id ( id, name, slug, price, sale_price, images )')
-    .eq('user_id', req.user.sub)
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not fetch wishlist.' })
-  return res.status(200).json({ success: true, wishlist: data.map(w => w.products) })
-}
-
-const addToWishlist = async (req, res) => {
-  const { productId } = req.body
-  if (!productId) return res.status(400).json({ success: false, message: 'productId is required.' })
-
-  const { error } = await supabase
-    .from('wishlists')
-    .upsert({ user_id: req.user.sub, product_id: productId }, { onConflict: 'user_id,product_id' })
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not add to wishlist.' })
-  return res.status(200).json({ success: true, message: 'Added to wishlist.' })
-}
-
-const removeFromWishlist = async (req, res) => {
-  await supabase
-    .from('wishlists')
-    .delete()
-    .eq('user_id', req.user.sub)
-    .eq('product_id', req.params.productId)
-
-  return res.status(200).json({ success: true, message: 'Removed from wishlist.' })
-}
-
-// ── Orders ────────────────────────────────────────────────────
-const listOrders = async (req, res) => {
-  const { page = 1, limit = 10 } = req.query
-  const offset = (page - 1) * limit
-
-  const { data, error, count } = await supabase
-    .from('orders')
-    .select('id, order_number, status, total_amount, created_at', { count: 'exact' })
-    .eq('client_id', req.user.sub)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + Number(limit) - 1)
-
-  if (error) return res.status(500).json({ success: false, message: 'Could not fetch orders.' })
-  return res.status(200).json({
-    success: true,
-    orders: data,
-    pagination: { page: Number(page), limit: Number(limit), total: count },
-  })
-}
-
-const getOrder = async (req, res) => {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('*, order_items(*, products:product_id(name, images))')
-    .eq('id', req.params.id)
-    .eq('client_id', req.user.sub)
-    .maybeSingle()
-
-  if (error || !data) return res.status(404).json({ success: false, message: 'Order not found.' })
-  return res.status(200).json({ success: true, order: data })
-}
-const createOrder = async (req, res) => {
-  console.log('createOrder called, user:', req.user?.sub)
-  
- const { shippingAddress, billingAddress, notes, couponCode } = req.body
-
-if (!shippingAddress || !shippingAddress.full_name || !shippingAddress.phone || !shippingAddress.address_line || !shippingAddress.city) {
-  return res.status(400).json({ success: false, message: 'A complete delivery address is required.' })
-}
-
-  const { data: cartItems, error: cartError } = await supabase
-    .from('cart_items')
-    .select(`
-      quantity,
-      products:product_id ( id, name, price, sale_price, stock_quantity ),
-      product_variants:variant_id ( id, price )
-    `)
-    .eq('user_id', req.user.sub)
-
-  console.log('cartItems:', cartItems, 'cartError:', cartError)
-
-  if (cartError || !cartItems?.length)
-    return res.status(400).json({ success: false, message: 'Your cart is empty.' })
-
-  let subtotal = 0
-  const lineItems = cartItems.map(item => {
-    const unitPrice  = item.product_variants?.price ?? item.products.sale_price ?? item.products.price
-    const totalPrice = unitPrice * item.quantity
-    subtotal += totalPrice
-    return {
-      product_id:  item.products.id,
-      variant_id:  item.product_variants?.id || null,
-      quantity:    item.quantity,
-      unit_price:  unitPrice,
-      total_price: totalPrice,
+    if (req.query.category) query = query.eq('category_id', req.query.category)
+    if (req.query.q) {
+      query = query.or(`name.ilike.%${req.query.q}%,short_description.ilike.%${req.query.q}%`)
     }
-  })
 
-  const taxAmount   = Math.round(subtotal * 0.13 * 100) / 100
-  const totalAmount = subtotal + taxAmount
+    query = query.order('sort_order', { ascending: true }).order('created_at', { ascending: false }).range(from, to)
 
-  const insertPayload = {
-    client_id:        req.user.sub,
-    order_number:     `ORD-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`,
-    status:           'pending',
-    subtotal,
-    tax_amount:       taxAmount,
-    total_amount:     totalAmount,
-    shipping_address: shippingAddress,
-    billing_address:  billingAddress,
-    coupon_code:      couponCode || null,
-    notes:            notes || null,
+    const { data, error, count } = await query
+    if (error) throw error
+
+    res.json({ products: data || [], pagination: { total: count || 0, page, limit } })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
   }
-  console.log('inserting order:', insertPayload)
-
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert(insertPayload)
-    .select()
-    .single()
-
-  console.log('order result:', order, 'orderError:', orderError)
-
-  if (orderError)
-    return res.status(500).json({ success: false, message: orderError.message, details: orderError })
-
-  const { error: itemsError } = await supabase
-    .from('order_items')
-    .insert(lineItems.map(item => ({ ...item, order_id: order.id })))
-
-  console.log('itemsError:', itemsError)
-
-  if (itemsError)
-    return res.status(500).json({ success: false, message: itemsError.message, details: itemsError })
-
-  return res.status(201).json({ success: true, message: 'Order created.', order })
 }
 
-module.exports = {
-  listCategories,
-  listProducts,
-  getProduct,
-  getCart,
-  addToCart,
-  updateCartItem,
-  removeFromCart,
-  clearCart,
-  getWishlist,
-  addToWishlist,
-  removeFromWishlist,
-  listOrders,
-  getOrder,
-  createOrder,
+// ---------- GET /api/store/products/:id ----------
+exports.getProductDetail = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .eq('is_active', true)
+      .single()
+    if (error || !product) return res.status(404).json({ message: 'Product not found' })
+
+    const { data: reviews } = await supabase
+      .from('product_reviews')
+      .select('id, author_name, rating, comment, created_at')
+      .eq('product_id', id)
+      .eq('is_approved', true)
+      .order('created_at', { ascending: false })
+      .limit(30)
+
+    res.json({ product: { ...product, reviews: reviews || [] } })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- POST /api/store/products/:id/reviews ----------
+exports.addReview = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { rating, comment, author_name } = req.body
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: 'Rating 1-5 required' })
+
+    const { error } = await supabase.from('product_reviews').insert({
+      product_id: id,
+      user_id: req.user.id,
+      author_name: author_name || 'Anonymous',
+      rating,
+      comment: comment || null,
+    })
+    if (error) throw error
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- CART ----------
+exports.getCart = async (req, res) => {
+  const { data, error } = await supabase
+    .from('cart_items')
+    .select('id, quantity, product_id, variant_id, products(id, name, price, sale_price, stock_quantity, is_digital, images, image_url)')
+    .eq('user_id', req.user.id)
+  if (error) return res.status(500).json({ message: error.message })
+
+  const cart = (data || []).map(row => ({
+    product_id: row.product_id,
+    quantity: row.quantity,
+    products: {
+      ...row.products,
+      images: row.products?.images?.length ? row.products.images : (row.products?.image_url ? [row.products.image_url] : []),
+    },
+  }))
+  res.json({ cart })
+}
+
+exports.addToCart = async (req, res) => {
+  try {
+    const { productId, variantId = null, quantity = 1 } = req.body
+    const { data: existing } = await supabase
+      .from('cart_items').select('id, quantity')
+      .eq('user_id', req.user.id).eq('product_id', productId)
+      .is('variant_id', variantId)
+      .maybeSingle()
+
+    if (existing) {
+      const { error } = await supabase.from('cart_items')
+        .update({ quantity: existing.quantity + quantity }).eq('id', existing.id)
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from('cart_items')
+        .insert({ user_id: req.user.id, product_id: productId, variant_id: variantId, quantity })
+      if (error) throw error
+    }
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+exports.updateCartItem = async (req, res) => {
+  const { productId } = req.params
+  const { quantity } = req.body
+  const { error } = await supabase.from('cart_items')
+    .update({ quantity }).eq('user_id', req.user.id).eq('product_id', productId)
+  if (error) return res.status(500).json({ message: error.message })
+  res.json({ success: true })
+}
+
+exports.removeCartItem = async (req, res) => {
+  const { productId } = req.params
+  const { error } = await supabase.from('cart_items')
+    .delete().eq('user_id', req.user.id).eq('product_id', productId)
+  if (error) return res.status(500).json({ message: error.message })
+  res.json({ success: true })
+}
+
+exports.clearCart = async (req, res) => {
+  const { error } = await supabase.from('cart_items').delete().eq('user_id', req.user.id)
+  if (error) return res.status(500).json({ message: error.message })
+  res.json({ success: true })
+}
+
+// ---------- POST /api/store/orders ----------
+// Body: { location: { full_name, phone, address_line, city, landmark, notes,
+//                      latitude, longitude, formatted_address } }
+// Creates the order (client_id, shipping_address jsonb + geo columns via
+// trigger) + snapshot order_items, all in one call. Cart quantities/prices
+// are re-read server-side so nothing is trusted from the client.
+exports.createOrder = async (req, res) => {
+  try {
+    const { location } = req.body
+    if (!location || location.latitude == null || location.longitude == null) {
+      return res.status(400).json({ message: 'Please drop a pin on the map for delivery.' })
+    }
+    if (!location.full_name?.trim() || !location.phone?.trim()) {
+      return res.status(400).json({ message: 'Full name and phone are required.' })
+    }
+
+    const { data: cartRows, error: cartErr } = await supabase
+      .from('cart_items')
+      .select('quantity, variant_id, products(id, name, price, sale_price, stock_quantity, is_digital)')
+      .eq('user_id', req.user.id)
+    if (cartErr) throw cartErr
+    if (!cartRows || cartRows.length === 0) return res.status(400).json({ message: 'Cart is empty.' })
+
+    for (const row of cartRows) {
+      const p = row.products
+      if (!p.is_digital && p.stock_quantity < row.quantity) {
+        return res.status(400).json({ message: `${p.name} is out of stock.` })
+      }
+    }
+
+    const subtotal = cartRows.reduce((s, row) => {
+      const price = row.products.sale_price ?? row.products.price ?? 0
+      return s + price * row.quantity
+    }, 0)
+
+    const shippingAddress = {
+      full_name: location.full_name,
+      phone: location.phone,
+      address_line: location.address_line || null,
+      city: location.city || null,
+      landmark: location.landmark || null,
+      notes: location.notes || null,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      formatted_address: location.formatted_address || null,
+    }
+
+    const { data: order, error: orderErr } = await supabase
+      .from('orders')
+      .insert({
+        client_id: req.user.id,
+        status: 'pending',
+        subtotal,
+        discount_amount: 0,
+        tax_amount: 0,
+        shipping_amount: 0,
+        total_amount: subtotal,
+        shipping_address: shippingAddress,
+        delivery_address: location.address_line || location.formatted_address || null,
+      })
+      .select().single()
+    if (orderErr) throw orderErr
+
+    const itemRows = cartRows.map(row => {
+      const unit = row.products.sale_price ?? row.products.price ?? 0
+      return {
+        order_id: order.id,
+        product_id: row.products.id,
+        variant_id: row.variant_id || null,
+        quantity: row.quantity,
+        unit_price: unit,
+        total_price: unit * row.quantity,
+      }
+    })
+    const { error: itemsErr } = await supabase.from('order_items').insert(itemRows)
+    if (itemsErr) throw itemsErr
+
+    res.json({ order })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
 }

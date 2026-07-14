@@ -3,7 +3,7 @@ const express = require('express')
 const router  = express.Router()
 const { authenticate, requireRole } = require('../middleware/auth')
 
-const c = require('../controllers/adminController')
+const c = require('./controllers/adminController')
 
 // Every admin route requires a valid JWT + admin or staff role
 const guard = [authenticate, requireRole(['admin', 'staff'])]

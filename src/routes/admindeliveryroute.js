@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const ctrl = require('../controllers/adminDeliveryRidersController')
+const ctrl = require('./controllers/adminDeliveryRidersController')
 const { authenticate, requireAdmin } = require('../middleware/auth')
 
 router.use(authenticate, requireAdmin)

@@ -1,7 +1,7 @@
 // routes/store.js
 const express = require('express')
 const router  = express.Router()
-const ctrl    = require('../controllers/storeController')
+const ctrl    = require('./controllers/storeController')
 const { authenticate } = require('../middleware/auth') // adjust path to your existing auth middleware
 
 // Public browsing

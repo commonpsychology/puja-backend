@@ -3,7 +3,7 @@ const express2 = require('express')
 const router2  = express2.Router()
 const multer   = require('multer')
 const upload   = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
-const adminCtrl = require('../controllers/adminProductsController')
+const adminCtrl = require('./controllers/adminProductsController')
 const { authenticate: auth2, isAdmin } = require('../middleware/auth')
 
 router2.use(auth2, isAdmin) // every route below requires admin

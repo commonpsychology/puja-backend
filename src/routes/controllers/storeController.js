@@ -14,6 +14,7 @@ exports.getCategories = async (req, res) => {
   const { data, error } = await supabase
     .from('categories')
     .select('*')
+    .eq('is_active', true)
     .order('sort_order', { ascending: true })
   if (error) return res.status(500).json({ message: error.message })
   res.json({ categories: data })

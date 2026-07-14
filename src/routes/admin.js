@@ -18,7 +18,6 @@ const {
   getSocialWorkPrograms, createSocialWorkProgram, updateSocialWorkProgram, deleteSocialWorkProgram,
   getPayments, updatePaymentStatus,
   sendNotificationToClient,
-  getProducts,  createProduct,  updateProduct,  deleteProduct,
   getPosts,     createPost,     updatePost,     deletePost,
   getNews,      createNews,     updateNews,     deleteNews,
   getResources, createResource, updateResource, deleteResource,
@@ -226,12 +225,7 @@ router.post  ('/psych-concepts',     guard, createPsychConcept)
 router.put   ('/psych-concepts/:id', guard, updatePsychConcept)
 router.delete('/psych-concepts/:id', guard, deletePsychConcept)
 
-// ─── Products ────────────────────────────────────────────────
-router.get   ('/products',     guard, getProducts)
-router.post  ('/products',     guard, createProduct)
-router.put   ('/products/:id', guard, updateProduct)
-router.patch ('/products/:id', guard, updateProduct)
-router.delete('/products/:id', guard, deleteProduct)
+
 
 // ─── Blog Posts ──────────────────────────────────────────────
 router.get   ('/posts',     guard, getPosts)

@@ -117,11 +117,13 @@ exports.getCart = async (req, res) => {
 exports.addToCart = async (req, res) => {
   try {
     const { productId, variantId = null, quantity = 1 } = req.body
-    const { data: existing } = await supabase
+let existingQuery = supabase
       .from('cart_items').select('id, quantity')
       .eq('user_id', req.user.id).eq('product_id', productId)
-      .is('variant_id', variantId)
-      .maybeSingle()
+    existingQuery = variantId
+      ? existingQuery.eq('variant_id', variantId)
+      : existingQuery.is('variant_id', null)
+    const { data: existing } = await existingQuery.maybeSingle()
 
     if (existing) {
       const { error } = await supabase.from('cart_items')

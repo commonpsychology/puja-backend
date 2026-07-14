@@ -1,0 +1,91 @@
+const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
+const { createClient } = require('@supabase/supabase-js')
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+const RIDER_ALLOWED_STATUSES = ['picked_up', 'in_transit', 'delivered', 'failed', 'returned']
+
+// ---------- POST /api/delivery/login ----------
+exports.login = async (req, res) => {
+  try {
+    const { phone, email, password } = req.body
+    if (!password || (!phone && !email)) {
+      return res.status(400).json({ message: 'Phone/email and password are required' })
+    }
+
+    let q = supabase.from('delivery_riders').select('*')
+    q = phone ? q.eq('phone', phone) : q.eq('email', email)
+    const { data: rider, error } = await q.single()
+    if (error || !rider) return res.status(401).json({ message: 'Invalid credentials' })
+    if (!rider.is_active) return res.status(403).json({ message: 'Your account is deactivated. Contact admin.' })
+
+    const ok = await bcrypt.compare(password, rider.password_hash || '')
+    if (!ok) return res.status(401).json({ message: 'Invalid credentials' })
+
+    const token = jwt.sign({ id: rider.id, type: 'rider' }, process.env.JWT_SECRET, { expiresIn: '30d' })
+    const { password_hash, ...safeRider } = rider
+    res.json({ token, rider: safeRider })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- GET /api/delivery/my-orders ----------
+exports.myOrders = async (req, res) => {
+  try {
+    const riderId = req.rider.id
+    const page  = Math.max(1, Number(req.query.page) || 1)
+    const limit = Math.min(50, Number(req.query.limit) || 15)
+    const from  = (page - 1) * limit
+    const to    = from + limit - 1
+
+    let query = supabase
+      .from('orders')
+      .select('*, profiles:client_id(full_name)', { count: 'exact' })
+      .eq('delivery_rider_id', riderId)
+
+    if (req.query.delivery_status) query = query.eq('delivery_status', req.query.delivery_status)
+    query = query.order('created_at', { ascending: false }).range(from, to)
+
+    const { data, error, count } = await query
+    if (error) throw error
+
+    const items = (data || []).map(o => ({ ...o, client_name: o.profiles?.full_name || o.client_name || null }))
+
+    const { data: all } = await supabase
+      .from('orders').select('delivery_status').eq('delivery_rider_id', riderId)
+    const summary = { total: (all || []).length }
+    ;(all || []).forEach(o => { summary[o.delivery_status] = (summary[o.delivery_status] || 0) + 1 })
+
+    res.json({ items, pagination: { total: count || 0, page, limit }, summary })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- PUT /api/delivery/my-orders/:id ----------
+exports.updateMyOrder = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { delivery_status, delivery_note, note } = req.body
+
+    if (!RIDER_ALLOWED_STATUSES.includes(delivery_status)) {
+      return res.status(400).json({ message: 'Invalid status for rider update' })
+    }
+
+    const { data: existing, error: findErr } = await supabase
+      .from('orders').select('id, delivery_rider_id').eq('id', id).single()
+    if (findErr || !existing) return res.status(404).json({ message: 'Order not found' })
+    if (existing.delivery_rider_id !== req.rider.id) return res.status(403).json({ message: 'This order is not assigned to you' })
+
+    const body = { delivery_status, delivery_note: delivery_note || note || null }
+    if (delivery_status === 'picked_up') body.picked_up_at = new Date().toISOString()
+    if (delivery_status === 'delivered') body.delivered_at = new Date().toISOString()
+
+    const { data, error } = await supabase.from('orders').update(body).eq('id', id).select().single()
+    if (error) throw error
+    res.json({ order: data })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}

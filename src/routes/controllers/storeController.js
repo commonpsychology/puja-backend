@@ -12,7 +12,7 @@ const supabase = createClient(
 // ---------- GET /api/store/categories ----------
 exports.getCategories = async (req, res) => {
   const { data, error } = await supabase
-    .from('product_categories')
+    .from('categories')
     .select('*')
     .order('sort_order', { ascending: true })
   if (error) return res.status(500).json({ message: error.message })

@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const ctrl = require('../controllers/deliveryController')
+const ctrl = require('./controllers/deliveryController')
 const { authenticateRider } = require('../middleware/deliveryAuth')
 
 router.post('/login', ctrl.login)

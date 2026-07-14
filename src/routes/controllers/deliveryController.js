@@ -5,7 +5,7 @@ const { createClient } = require('@supabase/supabase-js')
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const RIDER_ALLOWED_STATUSES = ['picked_up', 'in_transit', 'delivered', 'failed', 'returned']
 
-// ---------- POST /api/delivery/login ----------
+// ---------- POST /api/delivery/login --------
 exports.login = async (req, res) => {
   try {
     const { phone, email, password } = req.body

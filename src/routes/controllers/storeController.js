@@ -8,7 +8,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
-
 // ---------- GET /api/store/categories ----------
 exports.getCategories = async (req, res) => {
   const { data, error } = await supabase

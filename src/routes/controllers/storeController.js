@@ -101,7 +101,7 @@ exports.getCart = async (req, res) => {
   const { data, error } = await supabase
     .from('cart_items')
     .select('id, quantity, product_id, variant_id, products(id, name, price, sale_price, stock_quantity, is_digital, images, image_url)')
-    .eq('user_id', req.user.id)
+    .eq('user_id', req.user.sub)
   if (error) return res.status(500).json({ message: error.message })
 
   const cart = (data || []).map(row => ({
@@ -120,7 +120,7 @@ exports.addToCart = async (req, res) => {
     const { productId, variantId = null, quantity = 1 } = req.body
 let existingQuery = supabase
       .from('cart_items').select('id, quantity')
-      .eq('user_id', req.user.id).eq('product_id', productId)
+      .eq('user_id', req.user.sub).eq('product_id', productId)
     existingQuery = variantId
       ? existingQuery.eq('variant_id', variantId)
       : existingQuery.is('variant_id', null)
@@ -132,7 +132,7 @@ let existingQuery = supabase
       if (error) throw error
     } else {
       const { error } = await supabase.from('cart_items')
-        .insert({ user_id: req.user.id, product_id: productId, variant_id: variantId, quantity })
+        .insert({ user_id: req.user.sub, product_id: productId, variant_id: variantId, quantity })
       if (error) throw error
     }
     res.json({ success: true })
@@ -145,7 +145,7 @@ exports.updateCartItem = async (req, res) => {
   const { productId } = req.params
   const { quantity } = req.body
   const { error } = await supabase.from('cart_items')
-    .update({ quantity }).eq('user_id', req.user.id).eq('product_id', productId)
+    .update({ quantity }).eq('user_id', req.user.sub).eq('product_id', productId)
   if (error) return res.status(500).json({ message: error.message })
   res.json({ success: true })
 }
@@ -153,13 +153,13 @@ exports.updateCartItem = async (req, res) => {
 exports.removeCartItem = async (req, res) => {
   const { productId } = req.params
   const { error } = await supabase.from('cart_items')
-    .delete().eq('user_id', req.user.id).eq('product_id', productId)
+    .delete().eq('user_id', req.user.sub).eq('product_id', productId)
   if (error) return res.status(500).json({ message: error.message })
   res.json({ success: true })
 }
 
 exports.clearCart = async (req, res) => {
-  const { error } = await supabase.from('cart_items').delete().eq('user_id', req.user.id)
+  const { error } = await supabase.from('cart_items').delete().eq('user_id', req.user.sub)
   if (error) return res.status(500).json({ message: error.message })
   res.json({ success: true })
 }
@@ -183,7 +183,7 @@ exports.createOrder = async (req, res) => {
     const { data: cartRows, error: cartErr } = await supabase
       .from('cart_items')
       .select('quantity, variant_id, products(id, name, price, sale_price, stock_quantity, is_digital)')
-      .eq('user_id', req.user.id)
+      .eq('user_id', req.user.sub)
     if (cartErr) throw cartErr
     if (!cartRows || cartRows.length === 0) return res.status(400).json({ message: 'Cart is empty.' })
 
@@ -214,7 +214,7 @@ exports.createOrder = async (req, res) => {
     const { data: order, error: orderErr } = await supabase
       .from('orders')
       .insert({
-        client_id: req.user.id,
+        client_id: req.user.sub,
         status: 'pending',
         subtotal,
         discount_amount: 0,

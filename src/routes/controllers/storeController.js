@@ -1,6 +1,8 @@
 // controllers/storeController.js
 // Uses Supabase client created with the SERVICE ROLE key (bypasses RLS).
-// Assumes an `authenticate` middleware sets req.user = { id, role }.
+// Assumes an `authenticate` middleware sets req.user = { sub, role } (JWT
+// payload — every handler below reads req.user.sub, so addReview now does
+// too instead of the nonexistent req.user.id it used before).
 
 const { createClient } = require('@supabase/supabase-js')
 
@@ -76,6 +78,9 @@ exports.getProductDetail = async (req, res) => {
 }
 
 // ---------- POST /api/store/products/:id/reviews ----------
+// Reviews publish immediately (no moderation queue) — is_approved is set
+// true on insert so they show up in getProductDetail's next read straight
+// away, instead of silently sitting invisible like before.
 exports.addReview = async (req, res) => {
   try {
     const { id } = req.params
@@ -84,10 +89,11 @@ exports.addReview = async (req, res) => {
 
     const { error } = await supabase.from('product_reviews').insert({
       product_id: id,
-      user_id: req.user.id,
+      user_id: req.user.sub,
       author_name: author_name || 'Anonymous',
       rating,
       comment: comment || null,
+      is_approved: true,
     })
     if (error) throw error
     res.json({ success: true })

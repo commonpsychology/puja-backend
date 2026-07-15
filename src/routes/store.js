@@ -8,6 +8,7 @@ const { authenticate } = require('../middleware/auth')
 router.get('/categories', ctrl.getCategories)
 router.get('/products', ctrl.getProducts)
 router.get('/products/:id', ctrl.getProductDetail)
+router.get('/products/:id/reviews', ctrl.getProductReviews)
 
 // Requires login
 router.post('/products/:id/reviews', authenticate, ctrl.addReview)

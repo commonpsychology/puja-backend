@@ -1,11 +1,146 @@
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const { createClient } = require('@supabase/supabase-js')
+const { sendNotificationEmail } = require('../services/mailer')
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 const RIDER_ALLOWED_STATUSES = ['picked_up', 'in_transit', 'delivered', 'failed', 'returned']
 
-// ---------- POST /api/delivery/login --------
+const OTP_TTL_MINUTES = 10
+
+function generateOtp() {
+  // 6-digit numeric code, zero-padded
+  return String(crypto.randomInt(0, 1000000)).padStart(6, '0')
+}
+
+// ---------- POST /api/delivery/check-credentials ----------
+// Step 1 of login: verify email + password only. Does NOT issue a token.
+// Returns minimal user info the frontend needs to kick off the OTP step.
+exports.checkCredentials = async (req, res) => {
+  try {
+    const { email, password } = req.body
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required.' })
+    }
+
+    const { data: rider, error } = await supabase
+      .from('delivery_riders')
+      .select('id, email, phone, full_name, password_hash, is_active')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle()
+
+    // Same generic message whether the rider doesn't exist or password is wrong —
+    // avoids leaking which emails are registered.
+    if (error || !rider) return res.status(401).json({ message: 'Invalid email or password.' })
+    if (!rider.is_active) return res.status(403).json({ message: 'Your account is deactivated. Contact admin.' })
+
+    const ok = await bcrypt.compare(password, rider.password_hash || '')
+    if (!ok) return res.status(401).json({ message: 'Invalid email or password.' })
+
+    return res.status(200).json({
+      message: 'Credentials verified.',
+      user: {
+        id: rider.id,
+        email: rider.email,
+        full_name: rider.full_name,
+        phone: rider.phone,
+      },
+    })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- POST /api/delivery/send-otp ----------
+// Generates a 6-digit OTP, hashes + stores it with an expiry, emails it.
+exports.sendOtp = async (req, res) => {
+  try {
+    const { user_id } = req.body
+    if (!user_id) return res.status(400).json({ message: 'user_id is required.' })
+
+    const { data: rider, error: fetchErr } = await supabase
+      .from('delivery_riders')
+      .select('id, email, full_name, is_active')
+      .eq('id', user_id)
+      .maybeSingle()
+
+    if (fetchErr || !rider) return res.status(404).json({ message: 'Rider not found.' })
+    if (!rider.is_active) return res.status(403).json({ message: 'Your account is deactivated. Contact admin.' })
+
+    const otp = generateOtp()
+    const otp_hash = await bcrypt.hash(otp, 10)
+    const otp_expires_at = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000).toISOString()
+
+    const { error: updateErr } = await supabase
+      .from('delivery_riders')
+      .update({ otp_hash, otp_expires_at })
+      .eq('id', user_id)
+    if (updateErr) throw updateErr
+
+    if (rider.email) {
+      try {
+        await sendNotificationEmail({
+          to: rider.email,
+          title: 'Your Delivery Portal Login Code',
+          message: `Hi ${rider.full_name || ''}, your verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, contact your supervisor.`,
+        })
+      } catch (mailErr) {
+        console.error('[delivery/send-otp] email failed:', mailErr.message)
+        return res.status(500).json({ message: 'Could not send verification email. Please try again.' })
+      }
+    } else {
+      return res.status(400).json({ message: 'No email on file for this rider account.' })
+    }
+
+    return res.status(200).json({ message: 'Verification code sent.' })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- POST /api/delivery/verify-otp ----------
+// Verifies the OTP, clears it, issues the JWT + rider payload.
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { user_id, otp } = req.body
+    if (!user_id || !otp) return res.status(400).json({ message: 'user_id and otp are required.' })
+
+    const { data: rider, error } = await supabase
+      .from('delivery_riders')
+      .select('*')
+      .eq('id', user_id)
+      .maybeSingle()
+
+    if (error || !rider) return res.status(404).json({ message: 'Rider not found.' })
+    if (!rider.is_active) return res.status(403).json({ message: 'Your account is deactivated. Contact admin.' })
+
+    if (!rider.otp_hash || !rider.otp_expires_at) {
+      return res.status(400).json({ message: 'No verification code requested. Please request a new one.' })
+    }
+    if (new Date(rider.otp_expires_at).getTime() < Date.now()) {
+      return res.status(400).json({ message: 'Code expired. Please request a new one.' })
+    }
+
+    const ok = await bcrypt.compare(otp, rider.otp_hash)
+    if (!ok) return res.status(401).json({ message: 'Incorrect code. Please try again.' })
+
+    // Clear the OTP so it can't be reused
+    await supabase
+      .from('delivery_riders')
+      .update({ otp_hash: null, otp_expires_at: null })
+      .eq('id', rider.id)
+
+    const token = jwt.sign({ id: rider.id, type: 'rider' }, process.env.JWT_SECRET, { expiresIn: '30d' })
+    const { password_hash, otp_hash, otp_expires_at, ...safeRider } = rider
+
+    return res.status(200).json({ token, rider: safeRider })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- POST /api/delivery/login (legacy single-step — kept for compatibility) ----------
 exports.login = async (req, res) => {
   try {
     const { phone, email, password } = req.body

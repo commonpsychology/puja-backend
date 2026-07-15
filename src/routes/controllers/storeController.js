@@ -19,6 +19,7 @@ exports.getCategories = async (req, res) => {
   res.json({ categories: data })
 }
 
+
 // ---------- GET /api/store/products ----------
 exports.getProducts = async (req, res) => {
   try {

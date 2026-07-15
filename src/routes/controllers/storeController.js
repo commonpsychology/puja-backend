@@ -52,6 +52,11 @@ exports.getProducts = async (req, res) => {
 }
 
 // ---------- GET /api/store/products/:id ----------
+// No longer fetches the full reviews list here — product.rating and
+// product.reviews_count (already columns on `products`) are enough to
+// render the star summary instantly. Actual review text is paginated
+// separately via getProductReviews below, so this stays fast even once
+// a product has thousands of reviews.
 exports.getProductDetail = async (req, res) => {
   try {
     const { id } = req.params
@@ -63,31 +68,53 @@ exports.getProductDetail = async (req, res) => {
       .single()
     if (error || !product) return res.status(404).json({ message: 'Product not found' })
 
-    const { data: reviews } = await supabase
+    res.json({ product })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- GET /api/store/products/:id/reviews ----------
+// Paginated review list. ?page=1&limit=10 by default.
+exports.getProductReviews = async (req, res) => {
+  try {
+    const { id } = req.params
+    const page  = Math.max(1, Number(req.query.page) || 1)
+    const limit = Math.min(50, Number(req.query.limit) || 10)
+    const from  = (page - 1) * limit
+    const to    = from + limit - 1
+
+    const { data: reviews, error, count } = await supabase
       .from('product_reviews')
-      .select('id, author_name, rating, comment, created_at')
+      .select('id, author_name, rating, comment, created_at', { count: 'exact' })
       .eq('product_id', id)
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
-      .limit(30)
+      .range(from, to)
+    if (error) throw error
 
-    res.json({ product: { ...product, reviews: reviews || [] } })
+    const total = count || 0
+    res.json({
+      reviews: reviews || [],
+      pagination: { page, limit, total, hasMore: to + 1 < total },
+    })
   } catch (e) {
     res.status(500).json({ message: e.message })
   }
 }
 
 // ---------- POST /api/store/products/:id/reviews ----------
-// Reviews publish immediately (no moderation queue) — is_approved is set
-// true on insert so they show up in getProductDetail's next read straight
-// away, instead of silently sitting invisible like before.
+// Reviews publish immediately (no moderation queue). After inserting, we
+// recompute the aggregate rating/reviews_count on `products` directly here
+// — this doesn't rely on a DB trigger existing, so the star summary on
+// getProductDetail stays correct even without full review rows attached.
 exports.addReview = async (req, res) => {
   try {
     const { id } = req.params
     const { rating, comment, author_name } = req.body
     if (!rating || rating < 1 || rating > 5) return res.status(400).json({ message: 'Rating 1-5 required' })
 
-    const { error } = await supabase.from('product_reviews').insert({
+    const { error: insertErr } = await supabase.from('product_reviews').insert({
       product_id: id,
       user_id: req.user.sub,
       author_name: author_name || 'Anonymous',
@@ -95,7 +122,23 @@ exports.addReview = async (req, res) => {
       comment: comment || null,
       is_approved: true,
     })
-    if (error) throw error
+    if (insertErr) throw insertErr
+
+    const { data: allRatings, error: aggErr } = await supabase
+      .from('product_reviews')
+      .select('rating')
+      .eq('product_id', id)
+      .eq('is_approved', true)
+    if (aggErr) throw aggErr
+
+    const count = allRatings.length
+    const avg = count ? allRatings.reduce((s, r) => s + r.rating, 0) / count : 0
+
+    await supabase
+      .from('products')
+      .update({ rating: avg, reviews_count: count })
+      .eq('id', id)
+
     res.json({ success: true })
   } catch (e) {
     res.status(500).json({ message: e.message })

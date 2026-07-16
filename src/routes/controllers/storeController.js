@@ -317,6 +317,9 @@ exports.getOrders = async (req, res) => {
         order_items (
           id, product_id, variant_id, quantity, unit_price, total_price,
           products ( name, image_url, images )
+        ),
+        payments (
+          id, status, method, amount, transaction_id, paid_at, created_at
         )
       `, { count: 'exact' })
       .eq('client_id', req.user.sub)
@@ -328,7 +331,25 @@ exports.getOrders = async (req, res) => {
     const { data, error, count } = await query
     if (error) throw error
 
-    res.json({ orders: data || [], pagination: { total: count || 0, page, limit } })
+    const orders = (data || []).map(order => {
+      const payments = order.payments || []
+      const latest = payments.length
+        ? payments.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b)
+        : null
+
+      return {
+        ...order,
+        payment_status:          latest?.status          || 'unpaid',
+        payment_method:          latest?.method          || null,
+        payment_id:              latest?.id              || null,
+        payment_amount:          latest?.amount          ?? null,
+        payment_paid_at:         latest?.paid_at         || null,
+        payment_transaction_id:  latest?.transaction_id  || null,
+        payments: undefined,
+      }
+    })
+
+    res.json({ orders, pagination: { total: count || 0, page, limit } })
   } catch (e) {
     res.status(500).json({ message: e.message })
   }
@@ -349,6 +370,9 @@ exports.getOrderById = async (req, res) => {
         order_items (
           id, product_id, variant_id, quantity, unit_price, total_price,
           products ( name, image_url, images )
+        ),
+        payments (
+          id, status, method, amount, transaction_id, paid_at, created_at
         )
       `)
       .eq('id', req.params.id)
@@ -356,7 +380,24 @@ exports.getOrderById = async (req, res) => {
       .single()
 
     if (error || !data) return res.status(404).json({ message: 'Order not found' })
-    res.json({ order: data })
+
+    const payments = data.payments || []
+    const latest = payments.length
+      ? payments.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b)
+      : null
+
+    const order = {
+      ...data,
+      payment_status:          latest?.status          || 'unpaid',
+      payment_method:          latest?.method          || null,
+      payment_id:              latest?.id              || null,
+      payment_amount:          latest?.amount          ?? null,
+      payment_paid_at:         latest?.paid_at         || null,
+      payment_transaction_id:  latest?.transaction_id  || null,
+      payments: undefined,
+    }
+
+    res.json({ order })
   } catch (e) {
     res.status(500).json({ message: e.message })
   }

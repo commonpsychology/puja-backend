@@ -17,6 +17,12 @@ router.post('/cart', authenticate, ctrl.addToCart)
 router.put('/cart/:productId', authenticate, ctrl.updateCartItem)
 router.delete('/cart/:productId', authenticate, ctrl.removeCartItem)
 router.delete('/cart', authenticate, ctrl.clearCart)
+
+// Orders — list before creating/detail, order doesn't matter here since
+// GET and POST on the same path are distinct routes, but keeping /orders
+// above /orders/:id for readability
+router.get('/orders', authenticate, ctrl.getOrders)
 router.post('/orders', authenticate, ctrl.createOrder)
+router.get('/orders/:id', authenticate, ctrl.getOrderById)
 
 module.exports = router

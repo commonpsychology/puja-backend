@@ -296,4 +296,68 @@ exports.createOrder = async (req, res) => {
   }
 }
 
+// ---------- GET /api/store/orders ----------
+// Lists the logged-in client's own orders, most recent first, with
+// their line items + product name/image for the MyOrdersPage UI.
+// Optional ?status=pending&page=1&limit=50
+exports.getOrders = async (req, res) => {
+  try {
+    const limit = Math.min(100, Number(req.query.limit) || 50)
+    const page  = Math.max(1, Number(req.query.page) || 1)
+    const from  = (page - 1) * limit
+    const to    = from + limit - 1
 
+    let query = supabase
+      .from('orders')
+      .select(`
+        id, order_number, status, subtotal, discount_amount, tax_amount,
+        shipping_amount, total_amount, coupon_code, notes,
+        shipping_address, delivery_address, delivery_status,
+        created_at, updated_at,
+        order_items (
+          id, product_id, variant_id, quantity, unit_price, total_price,
+          products ( name, image_url, images )
+        )
+      `, { count: 'exact' })
+      .eq('client_id', req.user.sub)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    if (req.query.status) query = query.eq('status', req.query.status)
+
+    const { data, error, count } = await query
+    if (error) throw error
+
+    res.json({ orders: data || [], pagination: { total: count || 0, page, limit } })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
+// ---------- GET /api/store/orders/:id ----------
+// Single order detail for the logged-in client. Scoped to client_id so a
+// user can never fetch someone else's order by guessing/incrementing an id.
+exports.getOrderById = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id, order_number, status, subtotal, discount_amount, tax_amount,
+        shipping_amount, total_amount, coupon_code, notes,
+        shipping_address, delivery_address, delivery_status,
+        created_at, updated_at,
+        order_items (
+          id, product_id, variant_id, quantity, unit_price, total_price,
+          products ( name, image_url, images )
+        )
+      `)
+      .eq('id', req.params.id)
+      .eq('client_id', req.user.sub)
+      .single()
+
+    if (error || !data) return res.status(404).json({ message: 'Order not found' })
+    res.json({ order: data })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}

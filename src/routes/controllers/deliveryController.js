@@ -199,6 +199,7 @@ exports.myOrders = async (req, res) => {
 }
 
 // ---------- PUT /api/delivery/my-orders/:id ----------
+// ---------- PUT /api/delivery/my-orders/:id ----------
 exports.updateMyOrder = async (req, res) => {
   try {
     const { id } = req.params
@@ -209,13 +210,23 @@ exports.updateMyOrder = async (req, res) => {
     }
 
     const { data: existing, error: findErr } = await supabase
-      .from('orders').select('id, delivery_rider_id').eq('id', id).single()
+      .from('orders').select('id, delivery_rider_id, status').eq('id', id).single()
     if (findErr || !existing) return res.status(404).json({ message: 'Order not found' })
     if (existing.delivery_rider_id !== req.rider.id) return res.status(403).json({ message: 'This order is not assigned to you' })
 
     const body = { delivery_status, delivery_note: delivery_note || note || null }
-    if (delivery_status === 'picked_up') body.picked_up_at = new Date().toISOString()
-    if (delivery_status === 'delivered') body.delivered_at = new Date().toISOString()
+    if (delivery_status === 'picked_up')  body.picked_up_at = new Date().toISOString()
+    if (delivery_status === 'delivered')  body.delivered_at = new Date().toISOString()
+
+    // ── Keep the main order `status` in sync with rider-driven delivery events ──
+    // Only auto-advance forward, never overwrite a cancelled/refunded order.
+    const LOCKED = ['cancelled', 'refunded']
+    if (!LOCKED.includes(existing.status)) {
+      if (delivery_status === 'delivered') body.status = 'delivered'
+      else if (delivery_status === 'in_transit' && existing.status !== 'delivered') body.status = 'shipped'
+      // 'failed' / 'returned' deliberately left for admin to review manually —
+      // don't auto-flip order status to cancelled/refunded without human judgement.
+    }
 
     const { data, error } = await supabase.from('orders').update(body).eq('id', id).select().single()
     if (error) throw error

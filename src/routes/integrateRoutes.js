@@ -1,7 +1,6 @@
 // integrateRoutes.js
 const express = require('express')
 const { createIntegration, listIntegrations } = require('./controllers/integrateController')
-
 const router = express.Router()
 
 // NOTE: paths here are relative — mount this router the same way you mount

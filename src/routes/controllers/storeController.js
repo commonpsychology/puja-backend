@@ -332,20 +332,22 @@ exports.getOrders = async (req, res) => {
     if (error) throw error
 
     const orders = (data || []).map(order => {
-      const payments = order.payments || []
+      const payments = Array.isArray(order.payments) ? order.payments : []
       const latest = payments.length
-        ? payments.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b)
+        ? payments.reduce((a, b) =>
+            new Date(a.created_at || 0) > new Date(b.created_at || 0) ? a : b)
         : null
 
+      const { payments: _omit, ...orderWithoutPayments } = order
+
       return {
-        ...order,
+        ...orderWithoutPayments,
         payment_status:          latest?.status          || 'unpaid',
         payment_method:          latest?.method          || null,
         payment_id:              latest?.id              || null,
         payment_amount:          latest?.amount          ?? null,
         payment_paid_at:         latest?.paid_at         || null,
         payment_transaction_id:  latest?.transaction_id  || null,
-        payments: undefined,
       }
     })
 

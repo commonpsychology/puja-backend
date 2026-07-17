@@ -1,11 +1,11 @@
 // integrateRoutes.js
 const express = require('express')
-const { createIntegration, listIntegrations } = require('./integrateController')
+const { createIntegration, listIntegrations } = require('./controllers/integrateController')
 
 const router = express.Router()
 
 // NOTE: paths here are relative — mount this router the same way you mount
-// your existing auth routes, so the frontend's `${API_BASE}/integrate` call
+// your existing auth routes, so the frontend's `${API_BASE}/integrate` casll
 // lines up. If auth routes are e.g. `app.use('/api/auth', authRoutes)` with
 // `router.post('/login', ...)` inside, do the equivalent here:
 //   app.use('/api', integrateRoutes)   // → POST /api/integrate

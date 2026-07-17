@@ -4,22 +4,23 @@ const { createIntegration, listIntegrations } = require('./integrateController')
 
 const router = express.Router()
 
+// NOTE: paths here are relative — mount this router the same way you mount
+// your existing auth routes, so the frontend's `${API_BASE}/integrate` call
+// lines up. If auth routes are e.g. `app.use('/api/auth', authRoutes)` with
+// `router.post('/login', ...)` inside, do the equivalent here:
+//   app.use('/api', integrateRoutes)   // → POST /api/integrate
+
 // Public: anyone can submit the membership form
-router.post('/api/integrate', createIntegration)
+router.post('/integrate', createIntegration)
 
 // Admin-only: add your auth middleware in front of this in production, e.g.
-//   router.get('/api/integrate', requireAdmin, listIntegrations)
-router.get('/api/integrate', listIntegrations)
+//   router.get('/integrate', requireAdmin, listIntegrations)
+router.get('/integrate', listIntegrations)
 
 module.exports = router
 
-// --- wiring it up in your server entry point (e.g. server.js) ---
+// --- wiring it up in your server entry point (e.g. server.js), matching
+//     however auth.routes.js is already mounted there ---
 //
-//   const express = require('express')
 //   const integrateRoutes = require('./integrateRoutes')
-//
-//   const app = express()
-//   app.use(express.json())
-//   app.use(integrateRoutes)
-//
-//   app.listen(process.env.PORT || 3001)
+//   app.use('/api', integrateRoutes)

@@ -54,8 +54,8 @@ const playlistsRoute      = require('./routes/playlistRoute')
 const attendanceRoutes    = require('./routes/attendanceRoutes')
 const dreamsRouter        = require('./routes/dreamsRoute')
 const patientsRoute        = require('./routes/patient')
-const deliveryRoutes      = require('./routes/deliveryRoutes'
-  
+const deliveryRoutes      = require('./routes/deliveryRoutes')
+const integrateRoutes         = require('./routes/integrateRoutes'
 )
 const adminProductsRoutes = require('./routes/adminProducts')
 const esewaRouter         = require('./routes/esewa')
@@ -153,6 +153,7 @@ app.use('/api/delivery', require('./routes/delivery'))
 app.use('/api/reviews',              reviewsRoutes)
 app.use('/api/admin/delivery-riders', adminDeliveryRoutes)
 app.use('/api/volunteer',            volunteerRoutes)
+app.use('/api/integrate',             integrateRoutes)
 app.use('/api/staff',                 staffRoutes)
 app.use('/api/admin/orders',          adminOrderDeliveryRoutes)
 app.use('/api/polls',                pollsRoutes)

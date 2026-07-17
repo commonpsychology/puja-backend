@@ -10,12 +10,12 @@ import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 
 import otpRoutes        from './routes/otpRoutes.mjs'
-import integrateRoutes  from './routes/integrateRoutes.js'   // ✅ FIX: was require()'d before, now a proper ESM import
 
 const require    = createRequire(import.meta.url)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
 
+const integrateRoutes     = require('./routes/integrateRoutes')
 const errorHandler        = require('./middleware/errorHandler')
 const volunteerRoutes     = require('./routes/volunteerRoutes')
 const { startExpireHoldsJob } = require('./jobs/expireHolds')

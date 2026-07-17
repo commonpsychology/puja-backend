@@ -1,9 +1,9 @@
-import express from 'express'
-import { createIntegration, listIntegrations } from './controllers/integrateController.js'
+const express = require('express')
+const { createIntegration, listIntegrations } = require('./controllers/integrateController')
 
 const router = express.Router()
 
-router.post('/integrate', createIntegration)
-router.get('/integrate', listIntegrations)
+router.post('/', createIntegration)
+router.get('/', listIntegrations)
 
-export default router
+module.exports = router

@@ -3,15 +3,13 @@
 // API instead of inserting from the browser directly. Requires the SERVICE ROLE
 // key (never expose this key to the frontend).
 
-import { createClient } from '@supabase/supabase-js'
+const { createClient } = require('@supabase/supabase-js')
+
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } }
 )
-
-
-
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const SEX_OPTIONS = ['Female', 'Male', 'Non-binary', 'Prefer not to say']
@@ -99,4 +97,4 @@ async function listIntegrations(req, res) {
   return res.json({ ok: true, page, pageSize, total: count, members: data })
 }
 
-export { createIntegration, listIntegrations }
+module.exports = { createIntegration, listIntegrations }

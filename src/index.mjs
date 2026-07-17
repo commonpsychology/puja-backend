@@ -9,7 +9,8 @@ import path         from 'path'
 import { fileURLToPath } from 'url'
 import { createRequire } from 'module'
 
-import otpRoutes from './routes/otpRoutes.mjs'
+import otpRoutes        from './routes/otpRoutes.mjs'
+import integrateRoutes  from './routes/integrateRoutes.js'   // ✅ FIX: was require()'d before, now a proper ESM import
 
 const require    = createRequire(import.meta.url)
 const __filename = fileURLToPath(import.meta.url)
@@ -55,8 +56,6 @@ const attendanceRoutes    = require('./routes/attendanceRoutes')
 const dreamsRouter        = require('./routes/dreamsRoute')
 const patientsRoute        = require('./routes/patient')
 const deliveryRoutes      = require('./routes/deliveryRoutes')
-const integrateRoutes         = require('./routes/integrateRoutes'
-)
 const adminProductsRoutes = require('./routes/adminProducts')
 const esewaRouter         = require('./routes/esewa')
 const adminDeliveryRoutes = require('./routes/admindeliveryroute')
@@ -129,7 +128,7 @@ app.use(rateLimit({
   legacyHeaders:   false,
   message: { success: false, message: 'Too many requests. Slow down.' },
 }))
- 
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({
   status:    'ok',

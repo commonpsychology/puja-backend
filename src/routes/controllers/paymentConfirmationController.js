@@ -235,6 +235,20 @@ if (discountAmount > 0) {
       metadata.loyalty_payment_number   = loyaltyPaymentNumber
     }
 
+    // ✅ Human-readable label so admin doesn't have to parse raw JSON to see
+    // WHY this payment's amount was reduced. Stored on the same payment row,
+    // so it's already tied to payment.id and payment.client_id.
+    const labelParts = []
+    if (discountAmount > 0) {
+      labelParts.push(`🎫 Coupon ${rawCode} (–NPR ${discountAmount.toLocaleString()})`)
+    }
+    if (loyaltyApplied) {
+      labelParts.push(`🎉 Loyalty 50% off — payment #${loyaltyPaymentNumber} (–NPR ${loyaltyDiscountAmount.toLocaleString()})`)
+    }
+    if (labelParts.length) {
+      metadata.discount_label = labelParts.join(' + ')
+    }
+
     const insertPayload = {
       client_id:        userId,
       appointment_id:   apptId,

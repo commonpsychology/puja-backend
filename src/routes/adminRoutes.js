@@ -2,6 +2,7 @@
 const express = require('express')
 const router  = express.Router()
 const { authenticate, requireRole } = require('../middleware/auth')
+const adminNews = require('../controllers/adminNewsController')
 
 const c = require('./controllers/adminController')
 
@@ -28,6 +29,22 @@ router.put   ('/appointments/:id',        guard, c.setAppointmentStatus)
 router.get   ('/orders',            guard, c.getAllOrders)
 router.patch ('/orders/:id/status', guard, c.setOrderStatus)
 router.put   ('/orders/:id',        guard, c.setOrderStatus)
+
+
+router.get   ('/news',                   guard, adminNews.listNews)
+router.post  ('/news',                   guard, adminNews.createNews)
+router.put   ('/news/:id',               guard, adminNews.updateNews)
+router.delete('/news/:id',               guard, adminNews.deleteNews)
+
+// ─── News Categories (admin) ─────────────────────────────────
+router.get   ('/news-categories',        guard, adminNews.listCategoriesAdmin)
+router.post  ('/news-categories',        guard, adminNews.createCategory)
+router.put   ('/news-categories/:id',    guard, adminNews.updateCategory)
+router.delete('/news-categories/:id',    guard, adminNews.deleteCategory)
+
+// ─── Newsletter Subscribers (admin) ──────────────────────────
+router.get   ('/newsletter-subscribers',        guard, adminNews.listSubscribers)
+router.delete('/newsletter-subscribers/:id',    guard, adminNews.deleteSubscriber)
 
 // ─── Payments ────────────────────────────────────────────────
 router.get  ('/payments',      guard, c.getPayments)

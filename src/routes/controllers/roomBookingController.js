@@ -159,11 +159,18 @@ await expireStaleRoomHolds()
       })
     }
 
-    const seatNum = Number(seatNumber)
-    if (!seatNum || seatNum < 1 || seatNum > SEATS_PER_ROOM) {
+    // seatNumber: 1–SEATS_PER_ROOM for a single seat, or null/undefined/''
+    // for a whole-room booking (all seats).
+    const rawSeat = (seatNumber === undefined || seatNumber === null || seatNumber === '')
+      ? null
+      : Number(seatNumber)
+    const isWholeRoom = rawSeat === null
+    const seatNum = isWholeRoom ? null : rawSeat
+
+    if (!isWholeRoom && (!seatNum || seatNum < 1 || seatNum > SEATS_PER_ROOM)) {
       return res.status(400).json({
         success: false,
-        message: `Please select a valid seat (1–${SEATS_PER_ROOM}).`,
+        message: `Please select a valid seat (1–${SEATS_PER_ROOM}) or book the whole room.`,
       })
     }
 
@@ -187,26 +194,34 @@ await expireStaleRoomHolds()
       return res.status(409).json({ success: false, message: 'This room is not available for booking.' })
     }
 
-    // ── Conflict check: overlapping bookings for the SAME SEAT/room/date ──
+    // ── Conflict check: overlapping bookings for this room/date ──
+    // A whole-room booking conflicts with ANY existing booking that day.
+    // A single-seat booking conflicts with an existing whole-room booking,
+    // or with an existing booking for the SAME seat, at an overlapping time.
     const { data: conflicts, error: conflictErr } = await supabase
       .from('room_bookings')
       .select('id, seat_number, start_time, end_time')
       .eq('room_id', roomId)
       .eq('booked_date', bookedDate)
-      .eq('seat_number', seatNum)
       .not('status', 'in', '("cancelled")')
 
     if (conflictErr) throw conflictErr
 
+    const timeOverlaps = (b) => b.start_time < endTime && b.end_time > startTime
+
     const hasConflict = (conflicts || []).some((b) => {
-      // Overlap: existing.start < new.end AND existing.end > new.start
-      return b.start_time < endTime && b.end_time > startTime
+      if (!timeOverlaps(b)) return false
+      const existingIsWholeRoom = b.seat_number === null || b.seat_number === undefined
+      if (isWholeRoom || existingIsWholeRoom) return true
+      return b.seat_number === seatNum
     })
 
- if (hasConflict) {
+    if (hasConflict) {
       return res.status(409).json({
         success: false,
-        message: `Seat ${seatNum} is already booked for part of that time. Please choose a different seat or slot.`,
+        message: isWholeRoom
+          ? 'The whole room is not free for that entire time slot — one or more seats are already booked. Please choose a different slot.'
+          : `Seat ${seatNum} is already booked for part of that time. Please choose a different seat or slot.`,
       })
     }
 
@@ -228,7 +243,8 @@ await expireStaleRoomHolds()
     const [sh, sm] = startTime.split(':').map(Number)
     const [eh, em] = endTime.split(':').map(Number)
     const durationHours = ((eh * 60 + em) - (sh * 60 + sm)) / 60
-    const computedAmount = Math.round(durationHours * Number(room.price_per_hour) * 100) / 100
+    const seatMultiplier = isWholeRoom ? SEATS_PER_ROOM : 1
+    const computedAmount = Math.round(durationHours * Number(room.price_per_hour) * seatMultiplier * 100) / 100
     const totalAmount = (amount != null && !isNaN(Number(amount)))
       ? Number(amount)
       : computedAmount
@@ -239,7 +255,7 @@ await expireStaleRoomHolds()
       .insert({
         client_id:      clientId,
         room_id:        roomId,
-        seat_number:    seatNum,
+        seat_number:    seatNum, // null = whole room
         booked_date:    bookedDate,
         start_time:     startTime,
         end_time:       endTime,
@@ -282,7 +298,7 @@ await expireStaleRoomHolds()
     for (const admin of (admins || [])) {
       await sendNotification(admin.id, {
         title:   `📅 New Room Booking — ${room.name}`,
-        message: `Seat ${seatNum} booked for ${bookedDate} from ${startTime} to ${endTime}. Total: NPR ${totalAmount.toLocaleString()}. Payment pending.`,
+        message: `${isWholeRoom ? 'Whole room' : `Seat ${seatNum}`} booked for ${bookedDate} from ${startTime} to ${endTime}. Total: NPR ${totalAmount.toLocaleString()}. Payment pending.`,
         type:    'system',
         link:    '/staff/admin?tab=room-bookings',
       })

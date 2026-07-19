@@ -656,7 +656,7 @@ const updatePsychVideo = makeUpdate('psych_videos')
 const deletePsychVideo = makeSoftDelete('psych_videos')
 
 // ─────────────────────────────────────────────────────────────
-// PSYCH ANALYSES
+
 // ─────────────────────────────────────────────────────────────
 async function getPsychAnalyses(req, res, next) {
   try {

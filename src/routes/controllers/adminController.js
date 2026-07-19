@@ -655,9 +655,7 @@ const createPsychVideo = makeCreate('psych_videos')
 const updatePsychVideo = makeUpdate('psych_videos')
 const deletePsychVideo = makeSoftDelete('psych_videos')
 
-// ─────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────
 async function getPsychAnalyses(req, res, next) {
   try {
     const { page = 1, limit = 20, search, q } = req.query

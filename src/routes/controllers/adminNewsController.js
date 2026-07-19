@@ -157,7 +157,7 @@ async function listSubscribers(req, res) {
     let query = supabase
       .from('newsletter_subscribers')
       .select('*', { count: 'exact' })
-      .order('subscribed_at', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
     if (search) query = query.ilike('email', `%${search}%`)

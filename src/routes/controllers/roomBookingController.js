@@ -10,6 +10,7 @@ const { clientHasBookingOnDate } = require('./appointmentController')
 //   lives somewhere else.
 
 const getUserId = (req) => req.user?.sub || req.user?.id
+const SEATS_PER_ROOM = 7
 
 function isOneBookingPerDayError(err) {
   return !!err && (
@@ -114,7 +115,7 @@ async function checkAvailability(req, res, next) {
 
     const { data, error } = await supabase
       .from('room_bookings')
-      .select('start_time, end_time, status')
+      .select('seat_number, start_time, end_time, status')
       .eq('room_id', roomId)
       .eq('booked_date', date)
       .not('status', 'in', '("cancelled")')
@@ -122,11 +123,18 @@ async function checkAvailability(req, res, next) {
     if (error) throw error
 
     const bookedSlots = (data || []).map((b) => ({
-      start: b.start_time,
-      end:   b.end_time,
+      seatNumber: b.seat_number,
+      start:      b.start_time,
+      end:        b.end_time,
     }))
 
-    return res.status(200).json({ success: true, date, roomId, bookedSlots })
+    return res.status(200).json({
+      success: true,
+      date,
+      roomId,
+      seatsPerRoom: SEATS_PER_ROOM,
+      bookedSlots,
+    })
   } catch (err) { next(err) }
 }
 
@@ -142,12 +150,20 @@ async function createRoomBooking(req, res, next) {
     if (!clientId) return res.status(401).json({ success: false, message: 'Not authenticated.' })
 
 await expireStaleRoomHolds()
-    const { roomId, bookedDate, startTime, endTime, notes, paymentMethod, amount } = req.body
+    const { roomId, bookedDate, startTime, endTime, notes, paymentMethod, amount, seatNumber } = req.body
     // ── Validate required fields ────────────────────────────
     if (!roomId || !bookedDate || !startTime || !endTime) {
       return res.status(400).json({
         success: false,
         message: 'roomId, bookedDate, startTime, and endTime are required.',
+      })
+    }
+
+    const seatNum = Number(seatNumber)
+    if (!seatNum || seatNum < 1 || seatNum > SEATS_PER_ROOM) {
+      return res.status(400).json({
+        success: false,
+        message: `Please select a valid seat (1–${SEATS_PER_ROOM}).`,
       })
     }
 
@@ -171,12 +187,13 @@ await expireStaleRoomHolds()
       return res.status(409).json({ success: false, message: 'This room is not available for booking.' })
     }
 
-    // ── Conflict check: overlapping bookings for same room/date ──
+    // ── Conflict check: overlapping bookings for the SAME SEAT/room/date ──
     const { data: conflicts, error: conflictErr } = await supabase
       .from('room_bookings')
-      .select('id, start_time, end_time')
+      .select('id, seat_number, start_time, end_time')
       .eq('room_id', roomId)
       .eq('booked_date', bookedDate)
+      .eq('seat_number', seatNum)
       .not('status', 'in', '("cancelled")')
 
     if (conflictErr) throw conflictErr
@@ -189,7 +206,7 @@ await expireStaleRoomHolds()
  if (hasConflict) {
       return res.status(409).json({
         success: false,
-        message: 'This room is already booked for part of that time. Please choose a different slot.',
+        message: `Seat ${seatNum} is already booked for part of that time. Please choose a different seat or slot.`,
       })
     }
 
@@ -222,6 +239,7 @@ await expireStaleRoomHolds()
       .insert({
         client_id:      clientId,
         room_id:        roomId,
+        seat_number:    seatNum,
         booked_date:    bookedDate,
         start_time:     startTime,
         end_time:       endTime,
@@ -264,7 +282,7 @@ await expireStaleRoomHolds()
     for (const admin of (admins || [])) {
       await sendNotification(admin.id, {
         title:   `📅 New Room Booking — ${room.name}`,
-        message: `Booking for ${bookedDate} from ${startTime} to ${endTime}. Total: NPR ${totalAmount.toLocaleString()}. Payment pending.`,
+        message: `Seat ${seatNum} booked for ${bookedDate} from ${startTime} to ${endTime}. Total: NPR ${totalAmount.toLocaleString()}. Payment pending.`,
         type:    'system',
         link:    '/staff/admin?tab=room-bookings',
       })
@@ -306,11 +324,12 @@ async function listMyBookings(req, res, next) {
       .from('room_bookings')
       .select(`
         id, booked_date, start_time, end_time, duration_hours,
-        total_amount, payment_status, payment_method, status, notes, created_at,
-        room:room_id (id, name, description, amenities, images),
-        payment:payment_id (id, method, status, transaction_id, paid_at)
+        total_amount, payment_status, payment_method, status, notes,
+        cancellation_reason, created_at,
+        client:client_id (id, full_name, email, phone),
+        room:room_id (id, name, price_per_hour),
+        payment:payment_id (id, method, status, transaction_id, paid_at, amount, gateway_response)
       `, { count: 'exact' })
-      .eq('client_id', clientId)
       .order('booked_date', { ascending: false })
       .order('start_time', { ascending: false })
       .range(offset, offset + Number(limit) - 1)

@@ -72,11 +72,7 @@ router.post  ('/posts',     guard, c.createPost)
 router.put   ('/posts/:id', guard, c.updatePost)
 router.delete('/posts/:id', guard, c.deletePost)
 
-// ─── News Articles ────────────────────────────────────────────
-router.get   ('/news',     guard, c.getNews)
-router.post  ('/news',     guard, c.createNews)
-router.put   ('/news/:id', guard, c.updateNews)
-router.delete('/news/:id', guard, c.deleteNews)
+
 
 // ─── Resources ───────────────────────────────────────────────
 router.get   ('/resources',     guard, c.getResources)

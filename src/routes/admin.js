@@ -19,7 +19,6 @@ const {
   getPayments, updatePaymentStatus,
   sendNotificationToClient,
   getPosts,     createPost,     updatePost,     deletePost,
-  getNews,      createNews,     updateNews,     deleteNews,
   getResources, createResource, updateResource, deleteResource,
   getGallery,   createGalleryItem, updateGalleryItem, deleteGalleryItem,
   getResearch,  createResearch, updateResearch, deleteResearch,
@@ -87,6 +86,7 @@ const {
 } = require('./controllers/roomBookingController')
 
 const supabase = require('../db/supabase')
+const adminNews = require('./controllers/adminNewsController')
 
 const router = express.Router()
 
@@ -234,10 +234,20 @@ router.put   ('/posts/:id', guard, updatePost)
 router.delete('/posts/:id', guard, deletePost)
 
 // ─── News Articles ───────────────────────────────────────────
-router.get   ('/news',     guard, getNews)
-router.post  ('/news',     guard, createNews)
-router.put   ('/news/:id', guard, updateNews)
-router.delete('/news/:id', guard, deleteNews)
+router.get   ('/news',     guard, adminNews.listNews)
+router.post  ('/news',     guard, adminNews.createNews)
+router.put   ('/news/:id', guard, adminNews.updateNews)
+router.delete('/news/:id', guard, adminNews.deleteNews)
+
+// ─── News Categories ─────────────────────────────────────────
+router.get   ('/news-categories',     guard, adminNews.listCategoriesAdmin)
+router.post  ('/news-categories',     guard, adminNews.createCategory)
+router.put   ('/news-categories/:id', guard, adminNews.updateCategory)
+router.delete('/news-categories/:id', guard, adminNews.deleteCategory)
+
+// ─── Newsletter Subscribers ───────────────────────────────────
+router.get   ('/newsletter-subscribers',     guard, adminNews.listSubscribers)
+router.delete('/newsletter-subscribers/:id', guard, adminNews.deleteSubscriber)
 
 // ─── Resources ───────────────────────────────────────────────
 router.get   ('/resources',     guard, getResources)

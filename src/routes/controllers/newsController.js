@@ -92,7 +92,10 @@ async function subscribe(req, res) {
   try {
     const { error } = await supabase
       .from('newsletter_subscribers')
-      .upsert({ email: email.toLowerCase().trim(), subscribed_at: new Date().toISOString() }, { onConflict: 'email' })
+      .upsert(
+        { email: email.toLowerCase().trim(), is_active: true },
+        { onConflict: 'email' }
+      )
     if (error) throw error
     res.json({ success: true, message: 'Subscribed successfully' })
   } catch (err) {

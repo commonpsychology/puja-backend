@@ -664,7 +664,7 @@ async function getPsychAnalyses(req, res, next) {
     const offset = (Number(page) - 1) * Number(limit)
     let query = supabase
       .from('psych_analyses')
-      .select('id, title, slug, category, icon, color_var, excerpt, concepts, read_time, is_active, sort_order, published_at, created_at', { count: 'exact' })
+      .select('id, title, slug, category, icon, color_var, excerpt, content, concepts, read_time, is_active, sort_order, published_at, created_at', { count: 'exact' })
       .order('sort_order', { ascending: true })
       .range(offset, offset + Number(limit) - 1)
     if (search || q) query = query.or(`title.ilike.%${search || q}%,category.ilike.%${search || q}%`)

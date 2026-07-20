@@ -11,9 +11,11 @@ const {
 
 router.use(authenticate, requireRole(['admin', 'staff']))
 
-router.get   ('/',     adminListRooms)
-router.post  ('/',     adminCreateRoom)
-router.put   ('/:id',  adminUpdateRoom)
-router.delete('/:id',  adminDeleteRoom)
+const UUID_RE = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+
+router.get   ('/',                 adminListRooms)
+router.post  ('/',                 adminCreateRoom)
+router.put   (`/:id(${UUID_RE})`,  adminUpdateRoom)
+router.delete(`/:id(${UUID_RE})`,  adminDeleteRoom)
 
 module.exports = router

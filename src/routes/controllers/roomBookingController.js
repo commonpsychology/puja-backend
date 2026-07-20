@@ -531,7 +531,7 @@ async function adminListBookings(req, res, next) {
     let query = supabase
       .from('room_bookings')
       .select(`
-        id, booked_date, start_time, end_time, duration_hours,
+        id, booked_date, start_time, end_time, duration_hours, seat_number,
         total_amount, payment_status, payment_method, status, notes,
         cancellation_reason, created_at,
         client:client_id (id, full_name, email, phone),

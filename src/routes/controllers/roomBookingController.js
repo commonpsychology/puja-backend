@@ -767,31 +767,12 @@ async function adminRoomsSeatSummary(req, res, next) {
       return res.status(400).json({ success: false, message: 'date is required.' })
     }
 
-    const { data, error } = await supabase
-      .from('room_bookings')
-      .select('room_id, seat_number, status')
-      .eq('booked_date', date)
-      .not('status', 'in', '("cancelled")')
-
+    const { data, error } = await supabase.rpc('fn_rooms_seat_summary', { p_date: date })
     if (error) throw error
 
-    const byRoom = {}
-    ;(data || []).forEach(b => {
-      if (!byRoom[b.room_id]) byRoom[b.room_id] = { seats: new Set(), wholeRoom: false }
-      if (b.seat_number === null || b.seat_number === undefined) {
-        byRoom[b.room_id].wholeRoom = true
-      } else {
-        byRoom[b.room_id].seats.add(b.seat_number)
-      }
-    })
-
     const summary = {}
-    Object.keys(byRoom).forEach(roomId => {
-      const r = byRoom[roomId]
-      summary[roomId] = {
-        booked: r.wholeRoom ? SEATS_PER_ROOM : r.seats.size,
-        total:  SEATS_PER_ROOM,
-      }
+    ;(data || []).forEach(row => {
+      summary[row.room_id] = { booked: row.booked, total: row.total }
     })
 
     return res.status(200).json({ success: true, date, seatsPerRoom: SEATS_PER_ROOM, summary })
@@ -809,27 +790,25 @@ async function adminSeatMap(req, res, next) {
       return res.status(400).json({ success: false, message: 'roomId and date are required.' })
     }
 
-    const { data, error } = await supabase
-      .from('room_bookings')
-      .select(`
-        id, seat_number, start_time, end_time, status, payment_status, total_amount,
-        client:client_id (id, full_name, email, phone)
-      `)
-      .eq('room_id', roomId)
-      .eq('booked_date', date)
-      .not('status', 'in', '("cancelled")')
-      .order('start_time', { ascending: true })
-
+    const { data, error } = await supabase.rpc('fn_room_seat_map', { p_room_id: roomId, p_date: date })
     if (error) throw error
+
+    const rows = (data || []).map(r => ({
+      id: r.booking_id,
+      seat_number: r.seat_number,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      status: r.status,
+      payment_status: r.payment_status,
+      client: { id: r.client_id, full_name: r.client_name, email: r.client_email, phone: r.client_phone },
+    }))
 
     const seats = Array.from({ length: SEATS_PER_ROOM }, (_, i) => i + 1).map(seatNum => ({
       seatNumber: seatNum,
-      bookings: (data || []).filter(b =>
-        b.seat_number === seatNum || b.seat_number === null // null = whole room, occupies every seat
-      ),
+      bookings: rows.filter(b => b.seat_number === seatNum || b.seat_number === null),
     }))
 
-    const wholeRoomBookings = (data || []).filter(b => b.seat_number === null)
+    const wholeRoomBookings = rows.filter(b => b.seat_number === null)
 
     return res.status(200).json({
       success: true,
@@ -838,7 +817,7 @@ async function adminSeatMap(req, res, next) {
       seatsPerRoom: SEATS_PER_ROOM,
       seats,
       wholeRoomBookings,
-      allBookings: data || [],
+      allBookings: rows,
     })
   } catch (err) { next(err) }
 }

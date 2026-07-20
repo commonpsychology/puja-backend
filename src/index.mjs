@@ -64,6 +64,7 @@ const adminOrderDeliveryRoutes = require('./routes/adminOrderDelivery')
 const internalRoutes = require('./routes/internal')
 const adminRoomBookings   = require('./routes/adminRoomBookings')
 const adminRooms          = require('./routes/adminRooms')
+const clientFilesRoutes    = require('./routes/clientfilesRoutes')
 const roomBookingsAdmin   = require('./routes/roomBookingsAdmin')
 const app  = express()
 const PORT = process.env.PORT || 5000
@@ -166,7 +167,7 @@ app.use('/api/images',               require('./routes/images'))
 app.use('/api/psych',                psychRoute)
 app.use('/api/otp',                  otpRoutes)
 app.use('/api/bookings', sharedBookingsRoutes)
-
+app.use('/api/client-files', clientFilesRoutes)
 
 app.use('/api/attendance',           attendanceRoutes)
 app.use('/api/news',                 newsRoutes)
@@ -189,6 +190,7 @@ app.use('/api/wellness',             wellnessRoutes)
 app.use('/api/social-work-programs', socialWorkRoutes)
 app.use('/api/donations',            donationRoutes)
 app.use('/api/internal',             internalRoutes)
+
 
 app.get('/api/mood', (_req, res) => res.json({ success: true, moods: [] }))
 

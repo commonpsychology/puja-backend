@@ -1,7 +1,7 @@
-// routes/admin/roomBookingsAdmin.js
+
 const express = require('express')
 const router  = express.Router()
-const ctrl    = require('../controllers/roomBookingController')
+const ctrl    = require('./controllers/roomBookingController')
 const { authenticate } = require('../../middleware/auth')
 
 // Inline role gate — mirrors the role checks already used inline

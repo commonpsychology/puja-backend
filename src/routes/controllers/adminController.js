@@ -672,6 +672,8 @@ async function getPsychAnalyses(req, res, next) {
   } catch (err) { next(err) }
 }
 
+
+
 const createPsychAnalysis = makeCreate('psych_analyses')
 const updatePsychAnalysis = makeUpdate('psych_analyses')
 const deletePsychAnalysis = makeSoftDelete('psych_analyses')

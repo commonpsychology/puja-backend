@@ -17,6 +17,7 @@ const adminOnly = [authenticate, requireAdminOrStaff]
 // Only the two NEW endpoints — rooms CRUD and booking list/status already
 // live in adminRoomBookings.js / adminRooms.js, don't duplicate them here.
 router.get(   '/admin/room-bookings/seat-map', ...adminOnly, ctrl.adminSeatMap)
+router.get(   '/admin/rooms/seat-summary',     ...adminOnly, ctrl.adminRoomsSeatSummary)
 router.delete('/admin/room-bookings/:id',      ...adminOnly, ctrl.adminDeleteBooking)
 
 module.exports = router

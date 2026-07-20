@@ -756,6 +756,49 @@ async function adminDeleteBooking(req, res, next) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/rooms/seat-summary?date=
+// Admin: booked/total seat count for every room, for one date — powers the
+// "3/7" style column in the Rooms tab
+// ─────────────────────────────────────────────────────────────────────────────
+async function adminRoomsSeatSummary(req, res, next) {
+  try {
+    const { date } = req.query
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'date is required.' })
+    }
+
+    const { data, error } = await supabase
+      .from('room_bookings')
+      .select('room_id, seat_number, status')
+      .eq('booked_date', date)
+      .not('status', 'in', '("cancelled")')
+
+    if (error) throw error
+
+    const byRoom = {}
+    ;(data || []).forEach(b => {
+      if (!byRoom[b.room_id]) byRoom[b.room_id] = { seats: new Set(), wholeRoom: false }
+      if (b.seat_number === null || b.seat_number === undefined) {
+        byRoom[b.room_id].wholeRoom = true
+      } else {
+        byRoom[b.room_id].seats.add(b.seat_number)
+      }
+    })
+
+    const summary = {}
+    Object.keys(byRoom).forEach(roomId => {
+      const r = byRoom[roomId]
+      summary[roomId] = {
+        booked: r.wholeRoom ? SEATS_PER_ROOM : r.seats.size,
+        total:  SEATS_PER_ROOM,
+      }
+    })
+
+    return res.status(200).json({ success: true, date, seatsPerRoom: SEATS_PER_ROOM, summary })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/room-bookings/seat-map?roomId=&date=
 // Admin: full 7-seat grid for one room/date, including whole-room holds
 // ─────────────────────────────────────────────────────────────────────────────
@@ -819,6 +862,7 @@ module.exports = {
   adminUpdateBookingStatus,
   adminDeleteBooking,
   adminSeatMap,
+  adminRoomsSeatSummary,
   adminListRooms,
   adminCreateRoom,
   adminUpdateRoom,

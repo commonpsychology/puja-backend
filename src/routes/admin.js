@@ -99,6 +99,12 @@ function requireAdmin(req, res, next) {
 
 const guard = [authenticate, requireAdmin]
 
+// UUID-only param constraint — prevents literal path segments like
+// 'seat-map' or 'seat-summary' from being swallowed by a plain ':id'
+// route registered earlier in this router (this file is mounted before
+// the dedicated room-bookings/rooms routers, so it wins any overlap).
+const UUID_RE = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+
 // ─── Dashboard ───────────────────────────────────────────────
 router.get('/dashboard', guard, getDashboard)
 
@@ -185,11 +191,11 @@ router.get   ('/gallery-submissions/:id/download', guard, downloadGallerySubmiss
 router.post  ('/gallery/submit', upload.single('photo'), submitGalleryPhoto)
 
 // ─── Room Bookings ───────────────────────────────────────────
-router.get   ('/room-bookings',            guard, adminListBookings)
-router.get   ('/room-bookings/:id',        guard, adminGetBooking)
-router.put   ('/room-bookings/:id',        guard, adminUpdateBookingStatus)
-router.patch ('/room-bookings/:id/status', guard, adminUpdateBookingStatus)
-router.delete('/room-bookings/:id',        guard, async (req, res, next) => {
+router.get   ('/room-bookings',                            guard, adminListBookings)
+router.get   (`/room-bookings/:id(${UUID_RE})`,             guard, adminGetBooking)
+router.put   (`/room-bookings/:id(${UUID_RE})`,             guard, adminUpdateBookingStatus)
+router.patch (`/room-bookings/:id(${UUID_RE})/status`,      guard, adminUpdateBookingStatus)
+router.delete(`/room-bookings/:id(${UUID_RE})`,             guard, async (req, res, next) => {
   try {
     const { error } = await supabase.from('room_bookings').delete().eq('id', req.params.id)
     if (error) throw error
@@ -198,11 +204,11 @@ router.delete('/room-bookings/:id',        guard, async (req, res, next) => {
 })
 
 // ─── Rooms CRUD ──────────────────────────────────────────────
-router.get   ('/rooms',      guard, adminListRooms)
-router.post  ('/rooms',      guard, adminCreateRoom)
-router.put   ('/rooms/:id',  guard, adminUpdateRoom)
-router.patch ('/rooms/:id',  guard, adminUpdateRoom)
-router.delete('/rooms/:id',  guard, adminDeleteRoom)
+router.get   ('/rooms',                        guard, adminListRooms)
+router.post  ('/rooms',                        guard, adminCreateRoom)
+router.put   (`/rooms/:id(${UUID_RE})`,        guard, adminUpdateRoom)
+router.patch (`/rooms/:id(${UUID_RE})`,        guard, adminUpdateRoom)
+router.delete(`/rooms/:id(${UUID_RE})`,        guard, adminDeleteRoom)
 
 // ─── Therapists ──────────────────────────────────────────────
 router.get   ('/therapists',     guard, getTherapists)

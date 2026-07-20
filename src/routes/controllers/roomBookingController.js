@@ -735,6 +735,72 @@ async function adminDeleteRoom(req, res, next) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/admin/room-bookings/:id
+// Admin: cancels a booking (soft — never hard-deletes, so payment/audit
+// history linked to this row stays intact)
+// ─────────────────────────────────────────────────────────────────────────────
+async function adminDeleteBooking(req, res, next) {
+  try {
+    const { data, error } = await supabase
+      .from('room_bookings')
+      .update({ status: 'cancelled', cancellation_reason: 'Removed by admin' })
+      .eq('id', req.params.id)
+      .select()
+      .single()
+
+    if (error) throw error
+    if (!data) return res.status(404).json({ success: false, message: 'Booking not found.' })
+
+    return res.status(200).json({ success: true, message: 'Booking cancelled.', booking: data })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/admin/room-bookings/seat-map?roomId=&date=
+// Admin: full 7-seat grid for one room/date, including whole-room holds
+// ─────────────────────────────────────────────────────────────────────────────
+async function adminSeatMap(req, res, next) {
+  try {
+    const { roomId, date } = req.query
+    if (!roomId || !date) {
+      return res.status(400).json({ success: false, message: 'roomId and date are required.' })
+    }
+
+    const { data, error } = await supabase
+      .from('room_bookings')
+      .select(`
+        id, seat_number, start_time, end_time, status, payment_status, total_amount,
+        client:client_id (id, full_name, email, phone)
+      `)
+      .eq('room_id', roomId)
+      .eq('booked_date', date)
+      .not('status', 'in', '("cancelled")')
+      .order('start_time', { ascending: true })
+
+    if (error) throw error
+
+    const seats = Array.from({ length: SEATS_PER_ROOM }, (_, i) => i + 1).map(seatNum => ({
+      seatNumber: seatNum,
+      bookings: (data || []).filter(b =>
+        b.seat_number === seatNum || b.seat_number === null // null = whole room, occupies every seat
+      ),
+    }))
+
+    const wholeRoomBookings = (data || []).filter(b => b.seat_number === null)
+
+    return res.status(200).json({
+      success: true,
+      roomId,
+      date,
+      seatsPerRoom: SEATS_PER_ROOM,
+      seats,
+      wholeRoomBookings,
+      allBookings: data || [],
+    })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
   // Public
   listRooms,
@@ -751,6 +817,8 @@ module.exports = {
   adminListBookings,
   adminGetBooking,
   adminUpdateBookingStatus,
+  adminDeleteBooking,
+  adminSeatMap,
   adminListRooms,
   adminCreateRoom,
   adminUpdateRoom,

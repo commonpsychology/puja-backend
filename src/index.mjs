@@ -170,6 +170,7 @@ app.use('/api/bookings', sharedBookingsRoutes)
 app.use('/api/client-files', clientfilesRoutes)
 
 
+
 app.use('/api/attendance',           attendanceRoutes)
 app.use('/api/news',                 newsRoutes)
 app.use('/api/patients',             patientsRoute)

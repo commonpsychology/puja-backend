@@ -14,9 +14,14 @@ exports.assignRider = async (req, res) => {
       if (!rider.is_active) return res.status(400).json({ message: 'This rider is deactivated' })
     }
 
+    const patch = {
+      delivery_rider_id: rider_id || null,
+      delivery_status:   rider_id ? 'assigned' : 'unassigned',
+    }
+
     const { data: order, error } = await supabase
       .from('orders')
-      .update({ delivery_rider_id: rider_id || null })
+      .update(patch)
       .eq('id', id)
       .select('*, delivery_riders(id, full_name, area, vehicle_type)')
       .single()

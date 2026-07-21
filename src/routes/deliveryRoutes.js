@@ -324,8 +324,18 @@ router.put('/my-orders/:id', async (req, res) => {
   try {
     const rider          = await getRider(req)
     const { delivery_status, delivery_note, note } = req.body
-    const resolvedNote   = delivery_note || note || null
-    const RIDER_STATUSES = ['picked_up','in_transit','delivered','failed','returned']
+    const resolvedNote = delivery_note || note || null
+
+    // Single source of truth: rider picks the SAME status word the admin/customer see.
+    // Maps 1:1 to orders.status, with delivery_status kept only for internal filtering.
+    const STATUS_MAP = {
+      processing: 'assigned',
+      shipped:    'in_transit',
+      delivered:  'delivered',
+      cancelled:  'failed',
+      refunded:   'returned',
+    }
+    const RIDER_STATUSES = Object.keys(STATUS_MAP)
 
     if (!delivery_status || !RIDER_STATUSES.includes(delivery_status))
       return res.status(400).json({ message: `delivery_status must be one of: ${RIDER_STATUSES.join(', ')}` })
@@ -337,28 +347,18 @@ router.put('/my-orders/:id', async (req, res) => {
     if (order.delivery_rider_id !== rider.id)
       return res.status(403).json({ message: 'This order is not assigned to you.' })
     if (['delivered','returned'].includes(order.delivery_status))
-      return res.status(409).json({ message: `Order is already ${order.delivery_status}.` })
+      return res.status(409).json({ message: `Order is already ${order.status}.` })
 
     const now   = new Date().toISOString()
-    const patch = { delivery_status, delivery_note: resolvedNote, updated_at: now }
-    if (delivery_status === 'picked_up' && !order.picked_up_at) {
-      patch.picked_up_at = now
-      patch.status = 'processing'
+    const patch = {
+      status:         delivery_status,               // the label the customer/admin sees
+      delivery_status: STATUS_MAP[delivery_status],   // internal filter value
+      delivery_note:  resolvedNote,
+      updated_at:     now,
     }
-    if (delivery_status === 'in_transit') {
-      patch.status = 'shipped'
-    }
-    if (delivery_status === 'delivered') {
-      patch.delivered_at = now
-      patch.status = 'delivered'
-    }
-    if (delivery_status === 'failed') {
-      patch.failed_at = now
-      patch.status = 'processing'   // stays in processing so admin can review
-    }
-    if (delivery_status === 'returned') {
-      patch.status = 'cancelled'
-    }
+    if (delivery_status === 'processing' && !order.picked_up_at) patch.picked_up_at = now
+    if (delivery_status === 'delivered')  patch.delivered_at    = now
+    if (delivery_status === 'cancelled')  patch.failed_at       = now
 
     const { data: updated, error: upErr } = await supabase
       .from('orders').update(patch).eq('id', req.params.id)

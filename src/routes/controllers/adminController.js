@@ -331,10 +331,49 @@ async function getAllOrders(req, res, next) {
   } catch (err) { next(err) }
 }
 
+// Forward-status → delivery-status cascade, mirroring the rider-side
+// logic in routes/delivery.js so admin's manual status dropdown can't
+// leave delivery_status pointing at a stale/contradictory value.
+const ORDER_STATUS_TO_DS = {
+  processing: 'picked_up',
+  shipped:    'in_transit',
+  delivered:  'delivered',
+  cancelled:  'unassigned',
+}
+// delivery_status values a rider has already progressed past — admin
+// should never silently downgrade these via the plain status dropdown.
+const DS_LOCKED = ['delivered', 'returned']
+
 async function setOrderStatus(req, res, next) {
   try {
     const { status } = req.body
-    const { data, error } = await supabase.from('orders').update({ status }).eq('id', req.params.id).select().single()
+    const VALID = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded']
+    if (!status || !VALID.includes(status)) {
+      return res.status(400).json({ success: false, message: `status must be one of: ${VALID.join(', ')}` })
+    }
+
+    const { data: existing, error: fetchErr } = await supabase
+      .from('orders').select('delivery_status, delivery_rider_id').eq('id', req.params.id).single()
+    if (fetchErr || !existing) return res.status(404).json({ success: false, message: 'Order not found.' })
+
+    const update = { status, updated_at: new Date().toISOString() }
+    const mappedDs = ORDER_STATUS_TO_DS[status]
+    if (
+      existing.delivery_rider_id &&
+      mappedDs &&
+      !DS_LOCKED.includes(existing.delivery_status)
+    ) {
+      update.delivery_status = mappedDs
+      if (status === 'delivered')  update.delivered_at = new Date().toISOString()
+      if (status === 'cancelled' && existing.delivery_status !== 'unassigned') {
+        // keep it simple — admin cancelling doesn't unassign the rider,
+        // it just clears the in-flight delivery state
+        update.delivery_status = 'unassigned'
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('orders').update(update).eq('id', req.params.id).select().single()
     if (error) throw error
     return res.status(200).json({ success: true, order: data })
   } catch (err) { next(err) }

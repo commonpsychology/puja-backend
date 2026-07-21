@@ -265,7 +265,8 @@ router.get('/my-orders', async (req, res) => {
     id, order_number, status, total_amount,
     delivery_status, delivery_address, delivery_note, shipping_address,
     picked_up_at, delivered_at, failed_at, created_at, updated_at,
-    profiles!orders_client_id_fkey ( full_name )
+    profiles!orders_client_id_fkey ( full_name ),
+    payments ( status, method, created_at )
   `, { count: 'exact' })
   .eq('delivery_rider_id', rider.id)
   .order('created_at', { ascending: false })
@@ -279,9 +280,21 @@ router.get('/my-orders', async (req, res) => {
       return res.status(500).json({ message: 'Failed to fetch orders.' })
     }
 
-    const items = (rows || []).map(o => ({
-      ...o, client_name: o.profiles?.full_name || null, profiles: undefined,
-    }))
+    const items = (rows || []).map(o => {
+      const payments = Array.isArray(o.payments) ? o.payments : []
+      const latest = payments.length
+        ? payments.reduce((a, b) =>
+            new Date(a.created_at || 0) > new Date(b.created_at || 0) ? a : b)
+        : null
+      const { payments: _omit, ...rest } = o
+      return {
+        ...rest,
+        client_name:    o.profiles?.full_name || null,
+        profiles:       undefined,
+        payment_status: latest?.status || 'unpaid',
+        payment_method: latest?.method || null,
+      }
+    })
 
     const { data: all } = await supabase
       .from('orders').select('delivery_status').eq('delivery_rider_id', rider.id)

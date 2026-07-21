@@ -55,12 +55,10 @@ const playlistsRoute      = require('./routes/playlistRoute')
 const attendanceRoutes    = require('./routes/attendanceRoutes')
 const dreamsRouter        = require('./routes/dreamsRoute')
 const patientsRoute        = require('./routes/patient')
-const deliveryRoutes      = require('./routes/deliveryRoutes')
 const adminProductsRoutes = require('./routes/adminProducts')
 const esewaRouter         = require('./routes/esewa')
 const adminDeliveryRoutes = require('./routes/admindeliveryroute')
 const donationRoutes = require('./routes/donationRoutes');
-const adminOrderDeliveryRoutes = require('./routes/adminOrderDelivery')
 const internalRoutes = require('./routes/internal')
 const adminRoomBookings   = require('./routes/adminRoomBookings')
 const adminRooms          = require('./routes/adminRooms')
@@ -155,7 +153,6 @@ app.use('/api/admin/delivery-riders', adminDeliveryRoutes)
 app.use('/api/volunteer',            volunteerRoutes)
 app.use('/api/integrate',             integrateRoutes)
 app.use('/api/staff',                 staffRoutes)
-app.use('/api/admin/orders',          adminOrderDeliveryRoutes)
 app.use('/api/polls',                pollsRoutes)
 app.use('/api/workshops',            workshopRoutes)
 app.use('/api/settings',             settingsRoutes)
@@ -176,6 +173,11 @@ app.use('/api/news',                 newsRoutes)
 app.use('/api/patients',             patientsRoute)
 app.use('/api/dreams',               dreamsRouter)
 app.use('/api/blog',                 blogRoutes)
+// Removed: app.use('/api/delivery', deliveryRoutes) — dead duplicate of
+// './routes/delivery' mounted earlier above (Supabase Auth + otp_codes
+// table). This legacy version (bcrypt password_hash / otp_hash columns
+// on delivery_riders) never executed since Express matches the first
+// mount for any overlapping path, so it was pure dead code.
 app.use('/api/playlists',            playlistsRoute)
 app.use('/api/research',             researchRoutes)
 app.use('/api/resources',            resourcesRoutes)

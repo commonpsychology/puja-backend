@@ -76,7 +76,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-eval'", "'unsafe-inline'"],
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", "data:", "blob:", "https:"],
-      connectSrc:  ["'self'", "https://puja-backend-gamma.vercel.app", "https://commonpsychology.vercel.app"],
+      connectSrc:  ["'self'", "https://puja-backend-gamma.vercel.app", "https://commonpsychology.vercel.app", "https://router.project-osrm.org"],
       fontSrc:     ["'self'", "https:", "data:"],
       objectSrc:   ["'none'"],
       mediaSrc:    ["'self'"],

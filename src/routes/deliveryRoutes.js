@@ -341,7 +341,7 @@ router.put('/my-orders/:id', async (req, res) => {
       return res.status(400).json({ message: `delivery_status must be one of: ${RIDER_STATUSES.join(', ')}` })
 
     const { data: order, error: fetchErr } = await supabase
-      .from('orders').select('id, delivery_status, delivery_rider_id').eq('id', req.params.id).single()
+      .from('orders').select('id, status, delivery_status, delivery_rider_id').eq('id', req.params.id).single()
 
     if (fetchErr || !order) return res.status(404).json({ message: 'Order not found.' })
     if (order.delivery_rider_id !== rider.id)

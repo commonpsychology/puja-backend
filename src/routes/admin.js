@@ -75,6 +75,10 @@ const {
   flagCOD,
 } = require('./controllers/paymentConfirmationController')
 
+const { getAdminLiveStatuses } = require('./controllers/therapistLiveController')
+
+const { startLiveSession, endLiveSession, getMyLiveSession } = require('./controllers/therapistLiveController')
+
 const {
   adminListBookings,
   adminGetBooking,
@@ -121,6 +125,11 @@ router.patch ('/users/:id/role',          guard, setUserRole)
 router.get   ('/appointments',            guard, getAllAppointments)
 router.patch ('/appointments/:id/status', guard, setAppointmentStatus)
 router.put   ('/appointments/:id',        guard, setAppointmentStatus)
+
+router.get('/therapist-live-status', guard, getAdminLiveStatuses)
+router.post('/live-session/start', authenticate, startLiveSession)
+router.post('/live-session/end',   authenticate, endLiveSession)
+router.get ('/live-session',       authenticate, getMyLiveSession)
 
 // ─── Orders ──────────────────────────────────────────────────
 router.get   ('/orders',            guard, getAllOrders)

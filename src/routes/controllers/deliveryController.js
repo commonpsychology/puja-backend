@@ -198,6 +198,29 @@ exports.myOrders = async (req, res) => {
   }
 }
 
+// ---------- PUT /api/delivery/my-status ----------
+// Rider toggles their own availability (Free / Busy). Admin dashboard reads this.
+exports.updateMyStatus = async (req, res) => {
+  try {
+    const { is_available } = req.body
+    if (typeof is_available !== 'boolean') {
+      return res.status(400).json({ message: 'is_available (boolean) is required.' })
+    }
+
+    const { data, error } = await supabase
+      .from('delivery_riders')
+      .update({ is_available })
+      .eq('id', req.rider.id)
+      .select('id, is_available')
+      .single()
+
+    if (error) throw error
+    res.json({ rider: data })
+  } catch (e) {
+    res.status(500).json({ message: e.message })
+  }
+}
+
 // ---------- PUT /api/delivery/my-orders/:id ----------
 // ---------- PUT /api/delivery/my-orders/:id ----------
 exports.updateMyOrder = async (req, res) => {

@@ -13,5 +13,6 @@ router.post('/login', ctrl.login)
 
 router.get('/my-orders', authenticateRider, ctrl.myOrders)
 router.put('/my-orders/:id', authenticateRider, ctrl.updateMyOrder)
+router.put('/my-status', authenticateRider, ctrl.updateMyStatus)
 
 module.exports = router

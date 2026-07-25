@@ -231,11 +231,50 @@ async function setUserStatus(req, res, next) {
 async function setUserRole(req, res, next) {
   try {
     const { role } = req.body
-    if (!['client', 'therapist', 'admin', 'staff'].includes(role))
+    if (!['client', 'therapist', 'admin', 'staff', 'rider'].includes(role))
       return res.status(400).json({ success: false, message: 'Invalid role.' })
     const { data, error } = await supabase.from('profiles').update({ role }).eq('id', req.params.id).select('id, full_name, email, role').single()
     if (error) throw error
     return res.status(200).json({ success: true, user: data })
+  } catch (err) { next(err) }
+}
+
+// ─────────────────────────────────────────────────────────────
+// STAFF MEMBERS (admin + staff + therapist + rider, unified view)
+// ─────────────────────────────────────────────────────────────
+async function getStaffMembers(req, res, next) {
+  try {
+    const { role, search, page = 1, limit = 20 } = req.query
+    const pageNum  = Math.max(1, Number(page) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(limit) || 20))
+    const offset   = (pageNum - 1) * pageSize
+
+    let query = supabase
+      .from('staff_members')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1)
+
+    const VALID_ROLES = ['admin', 'staff', 'therapist', 'rider']
+    if (role && VALID_ROLES.includes(role)) {
+      query = query.eq('role', role)
+    }
+
+    if (search) {
+      const safe = String(search).trim().slice(0, 100).replace(/[%_,()]/g, '\\$&')
+      if (safe) {
+        query = query.or(`full_name.ilike.%${safe}%,email.ilike.%${safe}%`)
+      }
+    }
+
+    const { data, count, error } = await query
+    if (error) throw error
+
+    return res.status(200).json({
+      success: true,
+      items: data || [],
+      pagination: { page: pageNum, limit: pageSize, total: count || 0 },
+    })
   } catch (err) { next(err) }
 }
 
@@ -1627,6 +1666,7 @@ module.exports = {
  
   // users
   getUsers, toggleUserActive, setUserStatus, setUserRole,
+  getStaffMembers,
 
   // appointments
   getAllAppointments, setAppointmentStatus,

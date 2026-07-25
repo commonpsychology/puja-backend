@@ -12,6 +12,7 @@ const { authenticate } = require('../middleware/auth')
 const {
   getDashboard, registerStaff,
   getUsers, toggleUserActive, setUserStatus, setUserRole,
+  getStaffMembers,
   getAllAppointments, setAppointmentStatus,
   getTherapists, createTherapist, updateTherapist, deleteTherapist,
   getAllOrders, setOrderStatus,
@@ -120,6 +121,9 @@ router.get   ('/users',                   guard, getUsers)
 router.patch ('/users/:id/toggle-active', guard, toggleUserActive)
 router.patch ('/users/:id/status',        guard, setUserStatus)
 router.patch ('/users/:id/role',          guard, setUserRole)
+
+// ─── Staff Members (unified: admin + staff + therapist + rider) ──
+router.get   ('/staff-members',           guard, getStaffMembers)
 
 // ─── Appointments ────────────────────────────────────────────
 router.get   ('/appointments',            guard, getAllAppointments)

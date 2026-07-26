@@ -21,6 +21,8 @@ const volunteerRoutes     = require('./routes/volunteerRoutes')
 const { startExpireHoldsJob } = require('./jobs/expireHolds')
 const authRoutes          = require('./routes/auth')
 const profileRoutes       = require('./routes/profile')
+const profilesDirectoryRouter = require('./routes/profilesDirectory'); // new, plural, public
+
 const passwordRoutes      = require('./routes/password')
 const therapistsRoutes    = require('./routes/therapists')
 const therapistPortal     = require('./routes/therapistRoutes')
@@ -154,6 +156,7 @@ app.use('/api/admin/orders',          adminOrderDeliveryRoutes)
 app.use('/api/volunteer',            volunteerRoutes)
 app.use('/api/integrate',             integrateRoutes)
 app.use('/api/staff',                 staffRoutes)
+app.use('/api/profiles-directory', profilesDirectoryRouter);
 app.use('/api/polls',                pollsRoutes)
 app.use('/api/workshops',            workshopRoutes)
 app.use('/api/settings',             settingsRoutes)

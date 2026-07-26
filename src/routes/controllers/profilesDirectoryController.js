@@ -1,5 +1,4 @@
-const supabase = require('../db/supabase');
-
+const supabase = require('../../db/supabase');
 async function getCount(req, res) {
   const { count, error } = await supabase
     .from('profiles')

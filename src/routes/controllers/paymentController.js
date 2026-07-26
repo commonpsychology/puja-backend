@@ -139,7 +139,7 @@ async function approvePayment(req, res, next) {
    // Cascade: confirm linked appointment
     if (payment.appointment_id) {
       await supabase.from('appointments')
-        .update({ status: 'confirmed', payment_status: 'completed' })
+        .update({ status: 'confirmed', payment_status: 'paid' })
         .eq('id', payment.appointment_id)
         .in('status', ['pending'])
     }
@@ -249,7 +249,7 @@ async function confirmCOD(req, res, next) {
 
     if (payment.appointment_id) {
       await supabase.from('appointments')
-        .update({ status: 'confirmed', payment_status: 'completed' })
+        .update({ status: 'confirmed', payment_status: 'paid' })
         .eq('id', payment.appointment_id)
         .in('status', ['pending'])
     }
